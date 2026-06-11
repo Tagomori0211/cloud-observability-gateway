@@ -1,0 +1,23 @@
+---
+# Master playbook — GCE A (sushiski-app) のみ対象。
+# GCE B (mc-monitoring-1) は Minecraft-on-Kubenates リポジトリの Ansible が管理。
+#
+# 通常は cloud-init が初回プロビジョニングを行う。
+# このプレイブックは cloud-init で設定できないドリフト修正や
+# 追加設定変更に使用する。
+#
+# 実行:
+#   ansible-playbook -i infra/ansible/inventory.ini infra/ansible/site.yml
+#   ansible-playbook ... --tags docker   # Docker のみ再適用
+#   ansible-playbook ... --tags secrets  # .env 再取得のみ
+
+- name: Configure GCE A (sushiski-app)
+  hosts: gce_a
+  become: true
+  roles:
+    - role: docker
+      tags: docker
+    - role: tailscale
+      tags: tailscale
+    - role: app_deploy
+      tags: [app_deploy, secrets]

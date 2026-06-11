@@ -1,0 +1,13 @@
+# CI builds the fat JAR; this image just runs it.
+# Build context must be deploy/api/ where CI copies app.jar.
+FROM eclipse-temurin:21-jre-jammy
+
+WORKDIR /app
+COPY app.jar /app/app.jar
+
+# 8080: Ktor static serving (Flutter Web)
+# 50051: gRPC server
+# Both are only reachable inside the compose network — no host port binding.
+EXPOSE 8080 50051
+
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]

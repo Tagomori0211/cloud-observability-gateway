@@ -1,0 +1,48 @@
+---
+# GCE A (sushiski-app) のアプリディレクトリ初期化 + .env 配置。
+# - TUNNEL_TOKEN : Secret Manager (sushiski-tunnel-token) から取得
+# - VICTORIA_METRICS_URL : gcloud で mc-monitoring-1 の VPC 内部 IP を動的取得
+#
+# 前提:
+#   - VM SA (mc-proxy-sa) に roles/secretmanager.secretAccessor 付与済み
+#   - ファイアウォール tak-vpc-allow-vm-8428-from-sushiski が適用済み（Terraform で作成）
+
+- name: Create app directory tree
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0750"
+  loop:
+    - "{{ app_dir }}"
+    - "{{ app_dir }}/api"
+    - "{{ app_dir }}/web"
+
+- name: Fetch TUNNEL_TOKEN from Secret Manager
+  command: gcloud secrets versions access latest --secret=sushiski-tunnel-token
+  register: tunnel_token
+  no_log: true
+  changed_when: false
+
+- name: Fetch mc-monitoring-1 VPC internal IP
+  command: >
+    gcloud compute instances describe mc-monitoring-1
+    --zone=asia-northeast1-b
+    --format=get(networkInterfaces[0].networkIP)
+  register: vm_internal_ip
+  changed_when: false
+
+- name: Write .env (TUNNEL_TOKEN + VICTORIA_METRICS_URL)
+  copy:
+    dest: "{{ app_dir }}/.env"
+    content: |
+      TUNNEL_TOKEN={{ tunnel_token.stdout }}
+      VICTORIA_METRICS_URL=http://{{ vm_internal_ip.stdout }}:8428
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  no_log: true
+
+vars:
+  app_dir: "/home/{{ ansible_user }}/app"
