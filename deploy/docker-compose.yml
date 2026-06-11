@@ -1,0 +1,54 @@
+# Runtime stack on GCE A (sushiski-app): cloudflared + Envoy + Ktor (3 containers).
+#
+# Prerequisites (manual, one-time):
+#   - Cloudflare Zero Trust: create Tunnel, TUNNEL_TOKEN を Secret Manager
+#     (sushiski-tunnel-token) に登録 → cloud-init が ~/app/.env に展開
+#   - CF Public Hostname: app.tagomori.dev → http://envoy:80
+#   - sushiski-app に Tailscale 導入済み（cloud-init で自動実施）
+#     → gce-mc-monitoring:8428 に到達可能であること
+#
+# TUNNEL_TOKEN は ~/app/.env から自動ロードされる（compose v2 の env_file デフォルト動作）。
+# GCE ファイアウォール: IAP SSH (tcp:22) のみ。80/443/50051 の外部公開不要。
+#
+# NOTE: networks: internal: true を追加しないこと。
+#   cloudflared のアウトバウンド接続と Tailscale 経由の GCE B 通信が両方塞がる。
+
+services:
+  # ---- Cloudflare Tunnel — sole external ingress ----
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: app-cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - envoy
+    restart: unless-stopped
+
+  # ---- gRPC-Web conversion + routing ----
+  envoy:
+    image: envoyproxy/envoy:v1.31.5
+    container_name: app-envoy
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    # No ports: only reachable from cloudflared inside compose network.
+
+  # ---- Kotlin (Ktor static + grpc-kotlin) ----
+  api:
+    build:
+      context: ./api    # CI places app.jar + Dockerfile here
+    container_name: app-api
+    environment:
+      # mc-monitoring-1 の VPC 内部 IP (10.100.0.x) 経由で到達。
+      # ファイアウォール: tak-vpc-allow-vm-8428-from-sushiski (sushiski → minecraft タグ)
+      # 値は ~/app/.env の VICTORIA_METRICS_URL から自動ロード。
+      # 設定元: cloud-init / Ansible が gcloud で mc-monitoring-1 の内部 IP を動的取得。
+      VICTORIA_METRICS_URL: ${VICTORIA_METRICS_URL}
+    volumes:
+      # Flutter Web assets: rsync で更新、イメージ再ビルド不要。
+      - ./web:/app/web:ro
+    restart: unless-stopped
+    # No ports: 8080 and 50051 are compose-network-internal only.

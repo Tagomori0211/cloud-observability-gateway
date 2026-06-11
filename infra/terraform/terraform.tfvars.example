@@ -1,0 +1,8 @@
+# terraform.tfvars.example — コピーして terraform.tfvars を作成。
+# terraform.tfvars は .gitignore 済み。
+#
+# project_id は既存インフラ (Minecraft-on-Kubenates) と同一プロジェクト。
+# region / zone も既存インフラに合わせて asia-northeast1-b 固定。
+
+project_id   = "your-gcp-project-id"
+machine_type = "e2-small"

@@ -1,0 +1,182 @@
+# CI/CD: main push → (optional infra) → proto gen → Kotlin/Flutter build → GCE A deploy
+#
+# 接続方式: gcloud compute ssh --tunnel-through-iap
+#   既存インフラ (Minecraft-on-Kubenates) に合わせ、IAP 経由のみ。
+#   公開ポート (tcp:22/80/443) は一切不要。
+#
+# Required GitHub Secrets:
+#   GCP_CI_SA_KEY    : sushiski-ci-sa のサービスアカウントキー JSON (base64)
+#                      `terraform output -raw ci_sa_key_b64` で取得
+#   GCP_PROJECT_ID   : GCP プロジェクト ID
+#   GCE_ZONE         : asia-northeast1-b
+#   GCE_SSH_USER     : VM への OS Login ユーザー名
+#                      (SA メールの @ 前部分: sa_<数字>_<hex>)
+#                      `gcloud compute os-login describe-profile --project=...` で確認
+#
+# Optional (Terraform job):
+#   TF_VAR_PROJECT_ID: var.project_id に渡す値 (= GCP_PROJECT_ID と同一で可)
+
+name: Deploy to GCE
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  GCE_INSTANCE: sushiski-app
+  DEPLOY_DIR: ~/app
+
+jobs:
+  # ---- Optional: Terraform で infra/terraform/** 変更時のみ実行 ----
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: |
+      contains(join(github.event.commits.*.modified, ' '), 'infra/terraform') ||
+      contains(join(github.event.commits.*.added,    ' '), 'infra/terraform')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CI_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.7"
+
+      - name: Write terraform.tfvars
+        run: |
+          cat > infra/terraform/terraform.tfvars <<EOF
+          project_id = "${{ secrets.GCP_PROJECT_ID }}"
+          EOF
+
+      - run: terraform -chdir=infra/terraform init
+      - run: terraform -chdir=infra/terraform plan  -out=tfplan
+      - run: terraform -chdir=infra/terraform apply -auto-approve tfplan
+
+  # ---- Build and deploy application ----
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Dart stubs (Kotlin は Gradle が自動生成) ----
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Dart stubs from shared.proto
+        run: |
+          dart pub global activate protoc_plugin
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          mkdir -p frontend/lib/src/generated
+          protoc \
+            --proto_path=. \
+            --dart_out=grpc:frontend/lib/src/generated \
+            shared.proto
+
+      # ---- Backend ----
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build fat JAR
+        working-directory: backend
+        run: ./gradlew --no-daemon shadowJar
+
+      # ---- Frontend ----
+      # --web-renderer は Flutter 3.29 で削除済み。付けないこと。
+      - name: Build Flutter Web
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build web --release
+
+      # ---- Bundle ----
+      - name: Assemble deploy bundle
+        run: |
+          mkdir -p bundle/api bundle/web
+          cp backend/build/libs/*-all.jar  bundle/api/app.jar
+          cp deploy/Dockerfile.api         bundle/api/Dockerfile
+          cp -r frontend/build/web/.       bundle/web/
+          cp deploy/docker-compose.yml     bundle/
+          cp deploy/envoy.yaml             bundle/
+
+      # ---- GCP 認証 (IAP SSH に必要) ----
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CI_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # ---- ファイル転送 (gcloud compute scp + IAP) ----
+      # --delete 相当: 古いアセットを事前にクリア（.env は除外）
+      - name: Transfer bundle to GCE A via IAP
+        env:
+          ZONE: ${{ secrets.GCE_ZONE }}
+          SSH_USER: ${{ secrets.GCE_SSH_USER }}
+        run: |
+          # 既存アセットを削除（.env は保護）
+          gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
+            --zone="${ZONE}" \
+            --tunnel-through-iap \
+            --command="find ${DEPLOY_DIR} -mindepth 1 -not -name '.env' -delete 2>/dev/null; mkdir -p ${DEPLOY_DIR}/{api,web}"
+
+          # ファイル転送
+          gcloud compute scp \
+            --recurse bundle/api/app.jar bundle/api/Dockerfile \
+            "${SSH_USER}@${GCE_INSTANCE}:${DEPLOY_DIR}/api/" \
+            --zone="${ZONE}" --tunnel-through-iap
+
+          gcloud compute scp \
+            --recurse bundle/web/. \
+            "${SSH_USER}@${GCE_INSTANCE}:${DEPLOY_DIR}/web/" \
+            --zone="${ZONE}" --tunnel-through-iap
+
+          gcloud compute scp \
+            bundle/docker-compose.yml bundle/envoy.yaml \
+            "${SSH_USER}@${GCE_INSTANCE}:${DEPLOY_DIR}/" \
+            --zone="${ZONE}" --tunnel-through-iap
+
+      # ---- コンテナ再構築 (IAP SSH) ----
+      # `down` は使わない（不要なダウンタイムを避ける）
+      # envoy.yaml は bind mount のため内容変更後は明示的 restart が必要
+      - name: Rebuild containers on GCE A via IAP
+        env:
+          ZONE: ${{ secrets.GCE_ZONE }}
+          SSH_USER: ${{ secrets.GCE_SSH_USER }}
+        run: |
+          gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
+            --zone="${ZONE}" \
+            --tunnel-through-iap \
+            --command="
+              set -euo pipefail
+              cd ${DEPLOY_DIR}
+              docker compose up -d --build
+              docker compose restart envoy
+              docker image prune -f
+              echo '=== Deploy complete ===' && docker compose ps
+            "
