@@ -121,6 +121,8 @@ resource "google_compute_instance" "sushiski_app" {
   }
 
   metadata = {
+    # CI SA は OS Login で SSH する（メタデータ SSH キーは setMetadata 権限が必要になるため不可）
+    enable-oslogin = "TRUE"
     # Tailscale + Docker を初回プロビジョニング
     user-data = file("${path.module}/../cloud-init/sushiski-app.yaml")
   }
@@ -203,6 +205,13 @@ resource "google_project_iam_member" "ci_compute_viewer" {
   project = var.project_id
   role    = "roles/compute.viewer"
   member  = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
+}
+
+# VM が mc-proxy-sa を使用しているため、SSH には actAs 権限が必要
+resource "google_service_account_iam_member" "ci_act_as_vm_sa" {
+  service_account_id = data.google_service_account.mc_proxy_sa.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
 }
 
 # ============================================================
