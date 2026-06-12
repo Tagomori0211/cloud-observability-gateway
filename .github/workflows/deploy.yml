@@ -182,6 +182,13 @@ jobs:
             --command="
               set -euo pipefail
               cd ${DEPLOY_DIR}
+              # .env がなければ VM の SA (Secret Manager 読取可) で生成
+              if [ ! -f .env ]; then
+                TOKEN=\$(gcloud secrets versions access latest --secret=sushiski-tunnel-token)
+                VM_IP=\$(gcloud compute instances describe mc-monitoring-1 --zone=${ZONE} --format='get(networkInterfaces[0].networkIP)')
+                printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://%s:8428\n' \"\$TOKEN\" \"\$VM_IP\" > .env
+                chmod 600 .env
+              fi
               docker compose up -d --build
               docker compose restart envoy
               docker image prune -f
