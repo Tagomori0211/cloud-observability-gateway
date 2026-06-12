@@ -1,3 +1,5 @@
+import '../src/generated/shared.pb.dart' show MetricsResponse;
+
 class PlayersInfo {
   final int online;
   final int max;
@@ -100,25 +102,22 @@ class MetricsModel {
     );
   }
 
-  // Converts a protobuf MetricsResponse (generated stub) to MetricsModel.
-  // Uncomment and use once lib/src/generated/ stubs exist.
-  //
-  // factory MetricsModel.fromProto(dynamic /*MetricsResponse*/ proto) {
-  //   return MetricsModel(
-  //     isOnline: proto.isOnline,
-  //     serverName: proto.serverName.isEmpty ? 'Sushiski' : proto.serverName,
-  //     version: proto.version.isEmpty ? '---' : proto.version,
-  //     players: PlayersInfo(
-  //       online: proto.playersOnline,
-  //       max: proto.playersMax,
-  //       list: List<String>.from(proto.playerList),
-  //     ),
-  //     tps: proto.tps,
-  //     memory: MemoryInfo(usedMb: proto.memoryUsedMb, maxMb: proto.memoryMaxMb),
-  //     cpuUsage: proto.cpuUsage,
-  //     uptimeSeconds: proto.uptimeSeconds.toInt(),
-  //   );
-  // }
+  factory MetricsModel.fromProto(MetricsResponse proto) {
+    return MetricsModel(
+      isOnline: proto.isOnline,
+      serverName: proto.serverName.isEmpty ? 'Sushiski' : proto.serverName,
+      version: proto.version.isEmpty ? '---' : proto.version,
+      players: PlayersInfo(
+        online: proto.playersOnline,
+        max: proto.playersMax,
+        list: List<String>.from(proto.playerList),
+      ),
+      tps: proto.tps,
+      memory: MemoryInfo(usedMb: proto.memoryUsedMb, maxMb: proto.memoryMaxMb),
+      cpuUsage: proto.cpuUsage,
+      uptimeSeconds: proto.uptimeSeconds.toInt(),
+    );
+  }
 
   factory MetricsModel.offline() {
     return MetricsModel(
