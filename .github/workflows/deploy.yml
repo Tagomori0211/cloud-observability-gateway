@@ -182,11 +182,12 @@ jobs:
             --command="
               set -euo pipefail
               cd ${DEPLOY_DIR}
-              # .env がなければ VM の SA (Secret Manager 読取可) で生成
+              # .env がなければ VM の SA (Secret Manager 読取可) で生成。
+              # VictoriaMetrics の URL は mc-monitoring-1 の VPC 内部 IP (terraform output で確認済み)。
+              # mc-proxy-sa に compute.instances.get がないため動的取得はしない。
               if [ ! -f .env ]; then
                 TOKEN=\$(gcloud secrets versions access latest --secret=sushiski-tunnel-token)
-                VM_IP=\$(gcloud compute instances describe mc-monitoring-1 --zone=${ZONE} --format='get(networkInterfaces[0].networkIP)')
-                printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://%s:8428\n' \"\$TOKEN\" \"\$VM_IP\" > .env
+                printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://10.100.0.13:8428\n' \"\$TOKEN\" > .env
                 chmod 600 .env
               fi
               docker compose up -d --build
