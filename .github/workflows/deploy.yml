@@ -166,8 +166,8 @@ jobs:
             --zone="${ZONE}" --tunnel-through-iap
 
           gcloud compute scp \
-            --recurse bundle/web/. \
-            "${SSH_USER}@${GCE_INSTANCE}:${DEPLOY_DIR}/web/" \
+            --recurse bundle/web \
+            "${SSH_USER}@${GCE_INSTANCE}:${DEPLOY_DIR}/" \
             --zone="${ZONE}" --tunnel-through-iap
 
           gcloud compute scp \
