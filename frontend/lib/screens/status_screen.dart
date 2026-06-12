@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/metrics_model.dart';
-import '../services/metrics_service.dart';
+import '../services/metrics_grpc_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/player_list_card.dart';
@@ -15,7 +15,7 @@ class StatusScreen extends StatefulWidget {
 }
 
 class _StatusScreenState extends State<StatusScreen> {
-  final _service = MetricsService();
+  final _service = MetricsGrpcService();
   MetricsModel? _metrics;
   bool _loading = true;
   String? _error;
