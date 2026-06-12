@@ -5,8 +5,10 @@
 #   公開ポート (tcp:22/80/443) は一切不要。
 #
 # Required GitHub Secrets:
-#   GCP_CI_SA_KEY    : sushiski-ci-sa のサービスアカウントキー JSON (base64)
-#                      `terraform output -raw ci_sa_key_b64` で取得
+#   GCP_WIF_PROVIDER  : Workload Identity Provider リソース名
+#                       `terraform output -raw workload_identity_provider` で取得
+#   GCP_SERVICE_ACCOUNT: sushiski-ci-sa のメールアドレス
+#                       `terraform output -raw ci_service_account` で取得
 #   GCP_PROJECT_ID   : GCP プロジェクト ID
 #   GCE_ZONE         : asia-northeast1-b
 #   GCE_SSH_USER     : VM への OS Login ユーザー名
@@ -25,6 +27,10 @@ on:
 concurrency:
   group: deploy-production
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
 
 env:
   GCE_INSTANCE: sushiski-app
@@ -45,7 +51,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_CI_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -129,7 +136,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_CI_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
 

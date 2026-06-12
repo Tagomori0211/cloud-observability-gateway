@@ -20,3 +20,9 @@ variable "machine_type" {
   type        = string
   default     = "e2-small"
 }
+
+variable "github_repo" {
+  description = "GitHub リポジトリ (owner/name 形式)。WIF の attribute_condition で使用。"
+  type        = string
+  default     = "Tagomori0211/cloud-observability-gateway"
+}
