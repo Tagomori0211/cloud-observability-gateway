@@ -86,7 +86,8 @@ jobs:
 
       - name: Generate Dart stubs from shared.proto
         run: |
-          dart pub global activate protoc_plugin
+          # 21.1.2: protobuf ^3.x 互換。25.x は ^4.x 用で pubspec と不一致になる。
+          dart pub global activate protoc_plugin 21.1.2
           export PATH="$PATH:$HOME/.pub-cache/bin"
           mkdir -p frontend/lib/src/generated
           protoc \
@@ -118,7 +119,7 @@ jobs:
       - name: Assemble deploy bundle
         run: |
           mkdir -p bundle/api bundle/web
-          cp backend/build/libs/*-all.jar  bundle/api/app.jar
+          cp backend/build/libs/*.jar  bundle/api/app.jar
           cp deploy/Dockerfile.api         bundle/api/Dockerfile
           cp -r frontend/build/web/.       bundle/web/
           cp deploy/docker-compose.yml     bundle/
