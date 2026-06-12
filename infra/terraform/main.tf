@@ -29,7 +29,7 @@ data "google_compute_network" "tak_vpc" {
 }
 
 data "google_compute_subnetwork" "tak_subnet" {
-  name   = "tak-subnet"
+  name   = "tak-vpc-subnet"
   region = var.region
 }
 
@@ -205,9 +205,37 @@ resource "google_project_iam_member" "ci_compute_viewer" {
   member  = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
 }
 
-# Terraform 用 SA キー（terraform.tfvars には秘密鍵を書かない — Secret Manager 推奨）
-resource "google_service_account_key" "sushiski_ci_sa_key" {
+# ============================================================
+# Workload Identity Federation (GitHub Actions → GCP, キーレス認証)
+# ============================================================
+# 組織ポリシー constraints/iam.disableServiceAccountKeyCreation により
+# SA キー作成が禁止されているため WIF を使用する。
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github-pool"
+  display_name              = "GitHub Actions Pool"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-provider"
+  display_name                       = "GitHub Actions Provider"
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.aud"        = "assertion.aud"
+  }
+
+  attribute_condition = "assertion.repository == \"${var.github_repo}\""
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_service_account_iam_member" "github_wif" {
   service_account_id = google_service_account.sushiski_ci_sa.name
-  # キーは GitHub Secret (GCP_CI_SA_KEY) に登録すること。
-  # このリソースはキーの「存在」を管理するのみ。
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }

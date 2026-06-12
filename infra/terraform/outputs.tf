@@ -8,10 +8,14 @@ output "sushiski_app_internal_ip" {
   value       = google_compute_instance.sushiski_app.network_interface[0].network_ip
 }
 
-output "ci_sa_key_b64" {
-  description = "GitHub Secret (GCP_CI_SA_KEY) に設定する CI SA キー (base64)"
-  value       = google_service_account_key.sushiski_ci_sa_key.private_key
-  sensitive   = true
+output "workload_identity_provider" {
+  description = "GitHub Secret (GCP_WIF_PROVIDER) に設定する WIF プロバイダー名"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "ci_service_account" {
+  description = "GitHub Secret (GCP_SERVICE_ACCOUNT) に設定する CI SA メールアドレス"
+  value       = google_service_account.sushiski_ci_sa.email
 }
 
 output "victoria_metrics_url" {
