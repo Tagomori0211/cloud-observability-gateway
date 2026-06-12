@@ -39,7 +39,7 @@ env:
 jobs:
   # ---- Optional: Terraform で infra/terraform/** 変更時のみ実行 ----
   infra:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     if: |
       contains(join(github.event.commits.*.modified, ' '), 'infra/terraform') ||
