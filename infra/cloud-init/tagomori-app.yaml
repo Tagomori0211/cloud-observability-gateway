@@ -1,19 +1,19 @@
 #cloud-config
 # ============================================================
-# TAK Pipeline - Sushiski Status App GCE 初期セットアップ
+# TAK Pipeline - Tagomori Status App GCE 初期セットアップ
 # ============================================================
 # 実行内容（初回起動時のみ）:
 #   1. Docker / docker-compose-plugin インストール
 #   2. Tailscale インストール + Secret Manager 経由で auth_key 取得 → up
-#      hostname: gce-sushiski-app（gce-mc-monitoring に到達するため必須）
-#   3. Secret Manager から sushiski-tunnel-token を取得 → ~/app/.env に書き込み
+#      hostname: gce-tagomori-app（gce-mc-monitoring に到達するため必須）
+#   3. Secret Manager から tagomori-tunnel-token を取得 → ~/app/.env に書き込み
 #   4. ~/app/{api,web}/ ディレクトリ作成（CI rsync の受け皿）
 #
 # 前提:
 #   - VM の SA (mc-proxy-sa) に roles/secretmanager.secretAccessor 付与済み
 #   - Secret Manager に以下の secret が登録済み:
 #       tailscale-auth-key     （既存。mc-monitoring と共有）
-#       sushiski-tunnel-token  （新規。Terraform で skeleton 作成後、手動で値を設定）
+#       tagomori-tunnel-token  （新規。Terraform で skeleton 作成後、手動で値を設定）
 #   - GCE ファイアウォール: IAP SSH のみ（tcp:22 対外公開不要）
 # ============================================================
 
@@ -75,15 +75,15 @@ write_files:
       AUTH_KEY="$(gcloud secrets versions access latest --secret=tailscale-auth-key)"
       tailscale up \
         --auth-key="${AUTH_KEY}" \
-        --hostname=gce-sushiski-app \
+        --hostname=gce-tagomori-app \
         --accept-routes \
         --ssh
       echo "[tailscale-up] Tailscale up 完了"
 
   # TUNNEL_TOKEN + VICTORIA_METRICS_URL を .env に書き込む。
   # VICTORIA_METRICS_URL: mc-monitoring-1 の VPC 内部 IP を gcloud で動的取得。
-  # ファイアウォール tak-vpc-allow-vm-8428-from-sushiski が Terraform で適用済みの前提。
-  - path: /usr/local/bin/fetch-sushiski-secrets.sh
+  # ファイアウォール tak-vpc-allow-vm-8428-from-tagomori が Terraform で適用済みの前提。
+  - path: /usr/local/bin/fetch-tagomori-secrets.sh
     permissions: "0755"
     content: |
       #!/bin/bash
@@ -91,7 +91,7 @@ write_files:
       APP_DIR="/home/$(getent passwd 1000 | cut -d: -f1)/app"
       mkdir -p "${APP_DIR}"
 
-      TOKEN="$(gcloud secrets versions access latest --secret=sushiski-tunnel-token)"
+      TOKEN="$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)"
       VM_IP="$(gcloud compute instances describe mc-monitoring-1 \
         --zone=asia-northeast1-b \
         --format='get(networkInterfaces[0].networkIP)')"
@@ -108,8 +108,8 @@ runcmd:
   - systemctl enable --now tailscaled
   - /usr/local/bin/tailscale-up.sh
   # TUNNEL_TOKEN を .env に配置
-  - /usr/local/bin/fetch-sushiski-secrets.sh
+  - /usr/local/bin/fetch-tagomori-secrets.sh
   # CI rsync の受け皿ディレクトリ
   - mkdir -p /home/$(getent passwd 1000 | cut -d: -f1)/app/{api,web}
   # 起動ログ
-  - echo "sushiski-app bootstrap complete" > /var/log/sushiski-bootstrap.log
+  - echo "tagomori-app bootstrap complete" > /var/log/tagomori-bootstrap.log

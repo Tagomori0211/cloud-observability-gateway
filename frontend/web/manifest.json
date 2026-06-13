@@ -1,6 +1,6 @@
 {
-    "name": "sushiski_status_frontend",
-    "short_name": "sushiski_status_frontend",
+    "name": "tagomori_status_frontend",
+    "short_name": "tagomori_status_frontend",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

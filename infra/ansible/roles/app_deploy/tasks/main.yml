@@ -1,11 +1,11 @@
 ---
-# GCE A (sushiski-app) のアプリディレクトリ初期化 + .env 配置。
-# - TUNNEL_TOKEN : Secret Manager (sushiski-tunnel-token) から取得
+# GCE A (tagomori-app) のアプリディレクトリ初期化 + .env 配置。
+# - TUNNEL_TOKEN : Secret Manager (tagomori-tunnel-token) から取得
 # - VICTORIA_METRICS_URL : gcloud で mc-monitoring-1 の VPC 内部 IP を動的取得
 #
 # 前提:
 #   - VM SA (mc-proxy-sa) に roles/secretmanager.secretAccessor 付与済み
-#   - ファイアウォール tak-vpc-allow-vm-8428-from-sushiski が適用済み（Terraform で作成）
+#   - ファイアウォール tak-vpc-allow-vm-8428-from-tagomori が適用済み（Terraform で作成）
 
 - name: Create app directory tree
   file:
@@ -20,7 +20,7 @@
     - "{{ app_dir }}/web"
 
 - name: Fetch TUNNEL_TOKEN from Secret Manager
-  command: gcloud secrets versions access latest --secret=sushiski-tunnel-token
+  command: gcloud secrets versions access latest --secret=tagomori-tunnel-token
   register: tunnel_token
   no_log: true
   changed_when: false
