@@ -1,11 +1,11 @@
-output "sushiski_app_external_ip" {
-  description = "GCE A (sushiski-app) 外部 IP — IAP SSH の接続先ホスト名として使用"
-  value       = google_compute_address.sushiski_app_ip.address
+output "tagomori_app_external_ip" {
+  description = "GCE A (tagomori-app) 外部 IP — IAP SSH の接続先ホスト名として使用"
+  value       = google_compute_address.tagomori_app_ip.address
 }
 
-output "sushiski_app_internal_ip" {
-  description = "GCE A (sushiski-app) VPC 内部 IP"
-  value       = google_compute_instance.sushiski_app.network_interface[0].network_ip
+output "tagomori_app_internal_ip" {
+  description = "GCE A (tagomori-app) VPC 内部 IP"
+  value       = google_compute_instance.tagomori_app.network_interface[0].network_ip
 }
 
 output "workload_identity_provider" {
@@ -15,7 +15,7 @@ output "workload_identity_provider" {
 
 output "ci_service_account" {
   description = "GitHub Secret (GCP_SERVICE_ACCOUNT) に設定する CI SA メールアドレス"
-  value       = google_service_account.sushiski_ci_sa.email
+  value       = google_service_account.tagomori_ci_sa.email
 }
 
 output "victoria_metrics_url" {
