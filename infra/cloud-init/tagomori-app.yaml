@@ -88,7 +88,15 @@ write_files:
     content: |
       #!/bin/bash
       [ "$PAM_TYPE" = "open_session" ] || exit 0
-      usermod -aG docker "$PAM_USER" 2>/dev/null || true
+      # usermod は OS Login ユーザー（ローカル /etc/passwd 不在）に失敗するため
+      # /etc/group を直接編集してグループ追加する
+      if ! grep -qE "^docker:[^:]*:[^:]*:.*\b${PAM_USER}\b" /etc/group 2>/dev/null; then
+        if grep -qE "^docker:[^:]*:[^:]*:$" /etc/group 2>/dev/null; then
+          sed -i "s/^docker:\([^:]*:[^:]*\):$/docker:\1:${PAM_USER}/" /etc/group
+        else
+          sed -i "s/^docker:\([^:]*:[^:]*:.*\)$/docker:\1,${PAM_USER}/" /etc/group
+        fi
+      fi
 
   # TUNNEL_TOKEN + VICTORIA_METRICS_URL を .env に書き込む。
   # VICTORIA_METRICS_URL: mc-monitoring-1 の VPC 内部 IP を gcloud で動的取得。
