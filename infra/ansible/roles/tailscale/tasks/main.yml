@@ -1,7 +1,7 @@
 ---
 # Tailscale インストール + Secret Manager 経由での起動。
 # 既存 mc-proxy-1 と同一パターン (Minecraft-on-Kubenates/gce/cloud-init.yaml 参照)。
-# hostname: gce-sushiski-app → gce-mc-monitoring:8428 (VictoriaMetrics) に到達するため必須。
+# hostname: gce-tagomori-app → gce-mc-monitoring:8428 (VictoriaMetrics) に到達するため必須。
 
 - name: Add Tailscale apt key
   shell: |
@@ -42,11 +42,11 @@
     ts_status.rc != 0 or
     (ts_status.stdout | from_json).BackendState != 'Running'
 
-- name: Connect Tailscale (hostname gce-sushiski-app)
+- name: Connect Tailscale (hostname gce-tagomori-app)
   command: >
     tailscale up
     --auth-key={{ ts_auth_key.stdout }}
-    --hostname=gce-sushiski-app
+    --hostname=gce-tagomori-app
     --accept-routes
     --ssh
   no_log: true

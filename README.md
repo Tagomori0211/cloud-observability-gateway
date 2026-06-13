@@ -102,13 +102,13 @@ flowchart TD
 
 | リソース | 役割 | 管理元 |
 |---|---|---|
-| 🖥️ **GCE A**（`sushiski-app`） | cloudflared + Envoy + Ktor の3コンテナを Docker Compose で運用 | ✅ 本リポジトリの Terraform が作成 |
+| 🖥️ **GCE A**（`tagomori-app`） | cloudflared + Envoy + Ktor の3コンテナを Docker Compose で運用 | ✅ 本リポジトリの Terraform が作成 |
 | 📊 **GCE B**（`mc-monitoring-1`） | VictoriaMetrics + Grafana | 🔒 **既存リソース**（Minecraft-on-Kubenates 管理）。本リポジトリでは触らない |
 
 ### ネットワーク / セキュリティ設計
 
 - 🔐 通信は `tak-vpc`（`10.100.0.0/20`）内部で完結
-- 🧱 ファイアウォール `tak-vpc-allow-vm-8428-from-sushiski`（`sushiski` タグ → `minecraft` タグ / tcp:8428）を本リポジトリの Terraform が追加
+- 🧱 ファイアウォール `tak-vpc-allow-vm-8428-from-tagomori`（`tagomori` タグ → `minecraft` タグ / tcp:8428）を本リポジトリの Terraform が追加
 - 📜 **TLS 証明書はサーバー側に一切不要**（Cloudflare が終端）
 - 🚪 GCP ファイアウォールのインバウンドは **IAP SSH のみ**。80/443 は開けない
 
@@ -135,7 +135,7 @@ flowchart TD
 │   └── Dockerfile.api            # fat JAR を載せる薄いイメージ
 ├── infra/
 │   ├── terraform/                # GCE A・ファイアウォール・Secret skeleton・CI SA
-│   ├── cloud-init/sushiski-app.yaml  # 初回プロビジョニング（Docker/Tailscale/.env）
+│   ├── cloud-init/tagomori-app.yaml  # 初回プロビジョニング（Docker/Tailscale/.env）
 │   └── ansible/                  # ドリフト修正・再適用用（docker/tailscale/app_deploy ロール）
 └── .github/workflows/deploy.yml  # CI/CD（IAP SSH 経由デプロイ）
 ```
@@ -146,7 +146,7 @@ flowchart TD
 
 | シークレット | 保管場所 | 備考 |
 |---|---|---|
-| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `sushiski-tunnel-token` | cloud-init / Ansible が GCE A の `~/app/.env`（mode 600）に展開。git 管理外・rsync 除外 |
+| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | cloud-init / Ansible が GCE A の `~/app/.env`（mode 600）に展開。git 管理外・rsync 除外 |
 | `VICTORIA_METRICS_URL` | 📄 `~/app/.env`（自動生成） | `mc-monitoring-1` の VPC 内部 IP を gcloud で動的取得 |
 | CI 用 SA キー | 🐙 GitHub Secrets: `GCP_CI_SA_KEY` | `terraform output -raw ci_sa_key_b64` で取得 |
 | Tailscale auth key | 🗄️ Secret Manager: `tailscale-auth-key`（既存・共有） | 既存インフラと同一パターン |
@@ -173,15 +173,15 @@ terraform init && terraform apply
 
 | 作成されるもの | 既存リソース（data source 参照のみ・変更しない） |
 |---|---|
-| `sushiski-app` VM / 静的IP | `tak-vpc` / `tak-subnet` |
+| `tagomori-app` VM / 静的IP | `tak-vpc` / `tak-subnet` |
 | IAP SSH ファイアウォール / tcp:8428 ファイアウォール | `mc-proxy-sa` |
-| `sushiski-tunnel-token` skeleton / CI 用 SA（`sushiski-ci-sa`） | `mc-monitoring-1` |
+| `tagomori-tunnel-token` skeleton / CI 用 SA（`tagomori-ci-sa`） | `mc-monitoring-1` |
 
 ### 3. シークレット登録
 
 ```bash
 # Cloudflare で取得したトークンを登録（cloud-init がこれを .env に展開する）
-gcloud secrets versions add sushiski-tunnel-token --data-file=- <<< "eyJ..."
+gcloud secrets versions add tagomori-tunnel-token --data-file=- <<< "eyJ..."
 ```
 
 ### 4. GitHub Secrets

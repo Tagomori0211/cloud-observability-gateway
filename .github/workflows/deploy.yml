@@ -7,7 +7,7 @@
 # Required GitHub Secrets:
 #   GCP_WIF_PROVIDER  : Workload Identity Provider リソース名
 #                       `terraform output -raw workload_identity_provider` で取得
-#   GCP_SERVICE_ACCOUNT: sushiski-ci-sa のメールアドレス
+#   GCP_SERVICE_ACCOUNT: tagomori-ci-sa のメールアドレス
 #                       `terraform output -raw ci_service_account` で取得
 #   GCP_PROJECT_ID   : GCP プロジェクト ID
 #   GCE_ZONE         : asia-northeast1-b
@@ -33,7 +33,7 @@ permissions:
   id-token: write
 
 env:
-  GCE_INSTANCE: sushiski-app
+  GCE_INSTANCE: tagomori-app
   DEPLOY_DIR: ~/app
 
 jobs:
@@ -186,7 +186,7 @@ jobs:
               # VictoriaMetrics の URL は mc-monitoring-1 の VPC 内部 IP (terraform output で確認済み)。
               # mc-proxy-sa に compute.instances.get がないため動的取得はしない。
               if [ ! -f .env ]; then
-                TOKEN=\$(gcloud secrets versions access latest --secret=sushiski-tunnel-token)
+                TOKEN=\$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)
                 printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://10.100.0.13:8428\n' \"\$TOKEN\" > .env
                 chmod 600 .env
               fi

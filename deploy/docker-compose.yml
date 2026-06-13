@@ -1,10 +1,10 @@
-# Runtime stack on GCE A (sushiski-app): cloudflared + Envoy + Ktor (3 containers).
+# Runtime stack on GCE A (tagomori-app): cloudflared + Envoy + Ktor (3 containers).
 #
 # Prerequisites (manual, one-time):
 #   - Cloudflare Zero Trust: create Tunnel, TUNNEL_TOKEN を Secret Manager
-#     (sushiski-tunnel-token) に登録 → cloud-init が ~/app/.env に展開
+#     (tagomori-tunnel-token) に登録 → cloud-init が ~/app/.env に展開
 #   - CF Public Hostname: app.tagomori.dev → http://envoy:80
-#   - sushiski-app に Tailscale 導入済み（cloud-init で自動実施）
+#   - tagomori-app に Tailscale 導入済み（cloud-init で自動実施）
 #     → gce-mc-monitoring:8428 に到達可能であること
 #
 # TUNNEL_TOKEN は ~/app/.env から自動ロードされる（compose v2 の env_file デフォルト動作）。
@@ -43,7 +43,7 @@ services:
     container_name: app-api
     environment:
       # mc-monitoring-1 の VPC 内部 IP (10.100.0.x) 経由で到達。
-      # ファイアウォール: tak-vpc-allow-vm-8428-from-sushiski (sushiski → minecraft タグ)
+      # ファイアウォール: tak-vpc-allow-vm-8428-from-tagomori (tagomori → minecraft タグ)
       # 値は ~/app/.env の VICTORIA_METRICS_URL から自動ロード。
       # 設定元: cloud-init / Ansible が gcloud で mc-monitoring-1 の内部 IP を動的取得。
       VICTORIA_METRICS_URL: ${VICTORIA_METRICS_URL}
