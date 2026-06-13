@@ -16,7 +16,7 @@ variable "zone" {
 }
 
 variable "machine_type" {
-  description = "GCE A (sushiski-app) のマシンタイプ"
+  description = "GCE A (tagomori-app) のマシンタイプ"
   type        = string
   default     = "e2-small"
 }

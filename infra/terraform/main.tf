@@ -9,7 +9,7 @@ terraform {
   # State は既存インフラとは独立。GCS バックエンド推奨（初回のみ手動作成）。
   # backend "gcs" {
   #   bucket = "tak-pipeline-tfstate"
-  #   prefix = "sushiski-status/state"
+  #   prefix = "tagomori-status/state"
   # }
 }
 
@@ -46,15 +46,15 @@ locals {
     "app-part-of" = "tak-pipeline"
     "environment" = "prod"
     "managed-by"  = "terraform"
-    "component"   = "sushiski-status"
+    "component"   = "tagomori-status"
   }
 }
 
 # ============================================================
-# 静的 IP: sushiski-app 用（SSH CI ターゲットとして利用）
+# 静的 IP: tagomori-app 用（SSH CI ターゲットとして利用）
 # ============================================================
-resource "google_compute_address" "sushiski_app_ip" {
-  name   = "sushiski-app-ip"
+resource "google_compute_address" "tagomori_app_ip" {
+  name   = "tagomori-app-ip"
   region = var.region
   labels = local.common_labels
 }
@@ -68,12 +68,12 @@ data "google_compute_instance" "mc_monitoring" {
 }
 
 # ============================================================
-# Firewall: IAP SSH — sushiski タグ
+# Firewall: IAP SSH — tagomori タグ
 # ============================================================
 # 既存の tak-vpc-allow-iap-ssh は "minecraft" タグのみ対象。
-# sushiski-app は "sushiski" タグで分離し、独立して管理する。
-resource "google_compute_firewall" "sushiski_iap_ssh" {
-  name    = "tak-vpc-allow-iap-ssh-sushiski"
+# tagomori-app は "tagomori" タグで分離し、独立して管理する。
+resource "google_compute_firewall" "tagomori_iap_ssh" {
+  name    = "tak-vpc-allow-iap-ssh-tagomori"
   network = data.google_compute_network.tak_vpc.name
 
   allow {
@@ -83,19 +83,19 @@ resource "google_compute_firewall" "sushiski_iap_ssh" {
 
   # GCP IAP のソース IP レンジ
   source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["sushiski"]
+  target_tags   = ["tagomori"]
 
-  description = "Allow SSH via IAP for sushiski-app"
+  description = "Allow SSH via IAP for tagomori-app"
 }
 
 # ============================================================
-# GCE A: sushiski-app（新規作成）
+# GCE A: tagomori-app（新規作成）
 # ============================================================
-resource "google_compute_instance" "sushiski_app" {
-  name         = "sushiski-app"
+resource "google_compute_instance" "tagomori_app" {
+  name         = "tagomori-app"
   machine_type = var.machine_type
   zone         = var.zone
-  tags         = ["sushiski", "tailscale"]
+  tags         = ["tagomori", "tailscale"]
 
   allow_stopping_for_update = true
 
@@ -110,7 +110,7 @@ resource "google_compute_instance" "sushiski_app" {
   network_interface {
     subnetwork = data.google_compute_subnetwork.tak_subnet.name
     access_config {
-      nat_ip = google_compute_address.sushiski_app_ip.address
+      nat_ip = google_compute_address.tagomori_app_ip.address
     }
   }
 
@@ -124,7 +124,7 @@ resource "google_compute_instance" "sushiski_app" {
     # CI SA は OS Login で SSH する（メタデータ SSH キーは setMetadata 権限が必要になるため不可）
     enable-oslogin = "TRUE"
     # Tailscale + Docker を初回プロビジョニング
-    user-data = file("${path.module}/../cloud-init/sushiski-app.yaml")
+    user-data = file("${path.module}/../cloud-init/tagomori-app.yaml")
   }
 
   shielded_instance_config {
@@ -141,18 +141,18 @@ resource "google_compute_instance" "sushiski_app" {
 }
 
 # ============================================================
-# Secret Manager: sushiski-tunnel-token
+# Secret Manager: tagomori-tunnel-token
 # ============================================================
 # skeleton のみ Terraform で作成。実際の値は Cloudflare Tunnel 作成後に手動で登録:
-#   gcloud secrets versions add sushiski-tunnel-token --data-file=- <<< "eyJ..."
+#   gcloud secrets versions add tagomori-tunnel-token --data-file=- <<< "eyJ..."
 # ============================================================
-# Firewall: sushiski-app → mc-monitoring-1 (VictoriaMetrics :8428)
+# Firewall: tagomori-app → mc-monitoring-1 (VictoriaMetrics :8428)
 # ============================================================
 # mc-monitoring-1 は "minecraft" タグを持つ。
-# sushiski-app ("sushiski" タグ) から VPC 内部で :8428 に到達できるようにする。
+# tagomori-app ("tagomori" タグ) から VPC 内部で :8428 に到達できるようにする。
 # VictoriaMetrics は 0.0.0.0:8428 でバインド済み（gce/monitoring/compose.yaml）。
-resource "google_compute_firewall" "allow_vm_8428_from_sushiski" {
-  name    = "tak-vpc-allow-vm-8428-from-sushiski"
+resource "google_compute_firewall" "allow_vm_8428_from_tagomori" {
+  name    = "tak-vpc-allow-vm-8428-from-tagomori"
   network = data.google_compute_network.tak_vpc.name
 
   allow {
@@ -160,17 +160,17 @@ resource "google_compute_firewall" "allow_vm_8428_from_sushiski" {
     ports    = ["8428"]
   }
 
-  source_tags = ["sushiski"]   # FROM sushiski-app
+  source_tags = ["tagomori"]   # FROM tagomori-app
   target_tags = ["minecraft"]  # TO mc-monitoring-1 (既存タグ)
 
-  description = "Allow sushiski-app to reach VictoriaMetrics on mc-monitoring-1 via VPC"
+  description = "Allow tagomori-app to reach VictoriaMetrics on mc-monitoring-1 via VPC"
 }
 
 # ============================================================
-# Secret Manager: sushiski-tunnel-token
+# Secret Manager: tagomori-tunnel-token
 # ============================================================
-resource "google_secret_manager_secret" "sushiski_tunnel_token" {
-  secret_id = "sushiski-tunnel-token"
+resource "google_secret_manager_secret" "tagomori_tunnel_token" {
+  secret_id = "tagomori-tunnel-token"
   replication {
     auto {}
   }
@@ -180,8 +180,8 @@ resource "google_secret_manager_secret" "sushiski_tunnel_token" {
 # ============================================================
 # CI 用 Service Account（GitHub Actions → IAP SSH + Artifact 操作）
 # ============================================================
-resource "google_service_account" "sushiski_ci_sa" {
-  account_id   = "sushiski-ci-sa"
+resource "google_service_account" "tagomori_ci_sa" {
+  account_id   = "tagomori-ci-sa"
   display_name = "Sushiski Status CI/CD Service Account"
   description  = "Used by GitHub Actions to deploy via IAP SSH."
 }
@@ -190,28 +190,28 @@ resource "google_service_account" "sushiski_ci_sa" {
 resource "google_project_iam_member" "ci_iap_tunnel" {
   project = var.project_id
   role    = "roles/iap.tunnelResourceAccessor"
-  member  = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
+  member  = "serviceAccount:${google_service_account.tagomori_ci_sa.email}"
 }
 
 # IAP 経由の OS Login
 resource "google_project_iam_member" "ci_os_login" {
   project = var.project_id
   role    = "roles/compute.osLogin"
-  member  = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
+  member  = "serviceAccount:${google_service_account.tagomori_ci_sa.email}"
 }
 
 # Compute 読取（インスタンス名解決に必要）
 resource "google_project_iam_member" "ci_compute_viewer" {
   project = var.project_id
   role    = "roles/compute.viewer"
-  member  = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
+  member  = "serviceAccount:${google_service_account.tagomori_ci_sa.email}"
 }
 
 # VM が mc-proxy-sa を使用しているため、SSH には actAs 権限が必要
 resource "google_service_account_iam_member" "ci_act_as_vm_sa" {
   service_account_id = data.google_service_account.mc_proxy_sa.name
   role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.sushiski_ci_sa.email}"
+  member             = "serviceAccount:${google_service_account.tagomori_ci_sa.email}"
 }
 
 # ============================================================
@@ -244,7 +244,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 }
 
 resource "google_service_account_iam_member" "github_wif" {
-  service_account_id = google_service_account.sushiski_ci_sa.name
+  service_account_id = google_service_account.tagomori_ci_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }
