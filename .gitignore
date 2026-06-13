@@ -41,6 +41,7 @@ infra/terraform/*.tfstate.backup
 infra/terraform/*.tfstate.*.backup
 infra/terraform/terraform.tfvars
 infra/terraform/.terraform.lock.hcl
+infra/terraform/tfplan
 
 # ---- Ansible vault plaintext (commit only after encrypting) ----
 # If vault.yml is NOT encrypted, add it here:
