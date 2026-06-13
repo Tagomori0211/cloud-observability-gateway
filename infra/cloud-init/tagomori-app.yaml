@@ -80,6 +80,16 @@ write_files:
         --ssh
       echo "[tailscale-up] Tailscale up 完了"
 
+  # OS Login ユーザーは cloud-init 時点では存在しないため PAM フックで対応。
+  # SSH open_session 時に docker グループへ追加 → 次回 SSH から有効。
+  # CI は Transfer(1回目) → Rebuild(2回目) の2接続構成なので実用上問題なし。
+  - path: /usr/local/bin/add-oslogin-docker-group.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      [ "$PAM_TYPE" = "open_session" ] || exit 0
+      usermod -aG docker "$PAM_USER" 2>/dev/null || true
+
   # TUNNEL_TOKEN + VICTORIA_METRICS_URL を .env に書き込む。
   # VICTORIA_METRICS_URL: mc-monitoring-1 の VPC 内部 IP を gcloud で動的取得。
   # ファイアウォール tak-vpc-allow-vm-8428-from-tagomori が Terraform で適用済みの前提。
@@ -105,6 +115,8 @@ runcmd:
   - /usr/local/bin/setup-swap.sh
   - systemctl restart docker
   - systemctl enable docker
+  # OS Login ユーザーを SSH ログイン時に docker グループへ自動追加
+  - echo "session optional pam_exec.so /usr/local/bin/add-oslogin-docker-group.sh" >> /etc/pam.d/sshd
   - systemctl enable --now tailscaled
   - /usr/local/bin/tailscale-up.sh
   # TUNNEL_TOKEN を .env に配置
