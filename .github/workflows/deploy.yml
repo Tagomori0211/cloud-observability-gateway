@@ -42,8 +42,8 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 15
     if: |
-      contains(join(github.event.commits.*.modified, ' '), 'infra/terraform') ||
-      contains(join(github.event.commits.*.added,    ' '), 'infra/terraform')
+      contains(toJSON(github.event.commits.*.modified), 'infra/terraform') ||
+      contains(toJSON(github.event.commits.*.added),    'infra/terraform')
 
     steps:
       - uses: actions/checkout@v4
