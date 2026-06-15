@@ -2,6 +2,7 @@ package app
 
 import io.grpc.ServerBuilder
 import io.ktor.http.*
+import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.http.content.*
@@ -29,15 +30,15 @@ fun main() {
             // Cloudflare エッジキャッシュ / ブラウザ HTTP キャッシュに古い JS が残るのを防ぐ。
             get("/") {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-store")
-                call.respondFile(File("/app/web/index.html"))
+                call.respond(LocalFileContent(File("/app/web/index.html")))
             }
             get("/index.html") {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-store")
-                call.respondFile(File("/app/web/index.html"))
+                call.respond(LocalFileContent(File("/app/web/index.html")))
             }
             get("/flutter_bootstrap.js") {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-store")
-                call.respondFile(File("/app/web/flutter_bootstrap.js"))
+                call.respond(LocalFileContent(File("/app/web/flutter_bootstrap.js")))
             }
             singlePageApplication {
                 useResources = false
