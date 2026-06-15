@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/status_screen.dart';
+import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -15,7 +15,7 @@ class SushiskiStatusApp extends StatelessWidget {
       title: 'Sushiski Status',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const StatusScreen(),
+      home: const LoginScreen(),
     );
   }
 }

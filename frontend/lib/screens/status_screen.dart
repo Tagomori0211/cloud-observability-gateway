@@ -86,7 +86,9 @@ class _StatusScreenState extends State<StatusScreen> {
 
   Widget _buildBody() {
     final m = _metrics!;
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    final width = MediaQuery.of(context).size.width;
+    final isWide = width >= 900;
+    final isMobile = width < 480;
 
     return RefreshIndicator(
       onRefresh: _fetch,
@@ -105,7 +107,9 @@ class _StatusScreenState extends State<StatusScreen> {
                 const SizedBox(height: 20),
                 isWide
                     ? _buildMetricsGridWide(m)
-                    : _buildMetricsGridNarrow(m),
+                    : isMobile
+                        ? _buildMetricsGridMobile(m)
+                        : _buildMetricsGridNarrow(m),
                 const SizedBox(height: 20),
                 PlayerListCard(players: m.players),
                 const SizedBox(height: 40),
@@ -205,6 +209,20 @@ class _StatusScreenState extends State<StatusScreen> {
             Expanded(child: _cpuCard(m)),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildMetricsGridMobile(MetricsModel m) {
+    return Column(
+      children: [
+        _playerCountCard(m),
+        const SizedBox(height: 16),
+        _tpsCard(m),
+        const SizedBox(height: 16),
+        _memoryCard(m),
+        const SizedBox(height: 16),
+        _cpuCard(m),
       ],
     );
   }
