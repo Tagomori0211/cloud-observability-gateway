@@ -3,6 +3,7 @@ package app
 import app.generated.GetMetricsRequest
 import app.generated.MetricsResponse
 import app.generated.MetricsServiceGrpcKt
+import app.generated.ServerType
 import app.generated.metricsResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -24,59 +25,66 @@ class SharedServiceImpl(private val vmUrl: String) :
     }
 
     override suspend fun getMetrics(request: GetMetricsRequest): MetricsResponse =
-        fetchFromVictoriaMetrics()
+        fetchFromVictoriaMetrics(request.server)
 
     // Server sends a snapshot every 15 seconds to keep the Cloudflare Tunnel
     // connection alive (idle timeout ≈ 100s).
     override fun streamMetrics(request: GetMetricsRequest): Flow<MetricsResponse> = flow {
         while (true) {
-            emit(fetchFromVictoriaMetrics())
+            emit(fetchFromVictoriaMetrics(request.server))
             delay(15_000)
         }
     }
 
-    private suspend fun fetchFromVictoriaMetrics(): MetricsResponse {
-        return try {
-            val queries = mapOf(
-                "tps"         to "minecraft_tps",
-                "players"     to "minecraft_players_online",
-                "playersMax"  to "minecraft_players_max",
-                "memUsed"     to "minecraft_jvm_memory_used_bytes",
-                "memMax"      to "minecraft_jvm_memory_max_bytes",
-                "cpu"         to "minecraft_cpu_usage_percent",
-                "uptime"      to "minecraft_uptime_seconds",
-            )
+    private suspend fun fetchFromVictoriaMetrics(server: ServerType): MetricsResponse {
+        // mc-monitor job ラベルとコンテナ名をサーバー種別で分岐する。
+        // CPU limit: Java = 4000m (4 コア) / Bedrock = 8000m (8 コア) — query.txt 準拠。
+        val isBedrock  = server == ServerType.BEDROCK
+        val job        = if (isBedrock) "bedrock"  else "survival"
+        val container  = if (isBedrock) "bedrock"  else "minecraft"
+        val cpuLimit   = if (isBedrock) 8          else 4
+        val serverName = if (isBedrock) "Bedrock"  else "Java"
 
-            val results = queries.mapValues { (_, query) ->
-                val res: String = http.get("$vmUrl/api/v1/query") {
-                    parameter("query", query)
-                }.body()
-                parseVmScalar(res)
+        return try {
+            // mc-monitor が報告するオンライン状態で判定する
+            val healthy = vmQuery("""minecraft_status_healthy{job="$job"}""")
+            if (healthy != 1.0) {
+                return metricsResponse { isOnline = false; this.serverName = serverName }
             }
 
             metricsResponse {
                 isOnline      = true
-                serverName    = "Tagomori"
-                version       = queryVersion()
-                tps           = results["tps"] ?: 0.0
-                playersOnline = (results["players"] ?: 0.0).toInt()
-                playersMax    = (results["playersMax"] ?: 0.0).toInt()
-                memoryUsedMb  = ((results["memUsed"] ?: 0.0) / 1_048_576).toInt()
-                memoryMaxMb   = ((results["memMax"] ?: 0.0) / 1_048_576).toInt()
-                cpuUsage      = results["cpu"] ?: 0.0
-                uptimeSeconds = (results["uptime"] ?: 0.0).toLong()
+                this.serverName = serverName
+                version       = queryVersion(job)
+                latencyMs     = vmQuery("""minecraft_status_latency_ms{job="$job"}""") ?: 0.0
+                playersOnline = (vmQuery("""minecraft_status_player_count{job="$job"}""") ?: 0.0).toInt()
+                playersMax    = (vmQuery("""minecraft_status_player_max{job="$job"}""")  ?: 0.0).toInt()
+                val memUsed   = vmQuery("""container_memory_working_set_bytes{namespace="minecraft",container="$container"}""")  ?: 0.0
+                val memMax    = vmQuery("""container_spec_memory_limit_bytes{namespace="minecraft",container="$container"}""")   ?: 0.0
+                memoryUsedMb  = (memUsed / 1_048_576).toInt()
+                memoryMaxMb   = (memMax  / 1_048_576).toInt()
+                cpuUsage      = vmQuery(
+                    """rate(container_cpu_usage_seconds_total{namespace="minecraft",container="$container"}[5m]) / $cpuLimit * 100"""
+                ) ?: 0.0
+                uptimeSeconds = 0L
             }
         } catch (_: Exception) {
-            metricsResponse { isOnline = false; serverName = "Tagomori" }
+            metricsResponse { isOnline = false; this.serverName = serverName }
         }
     }
 
-    private suspend fun queryVersion(): String = try {
-        val res: String = http.get("$vmUrl/api/v1/query") {
-            parameter("query", "minecraft_server_info")
+    private suspend fun vmQuery(query: String): Double? {
+        val body: String = http.get("$vmUrl/api/v1/query") {
+            parameter("query", query)
         }.body()
-        val json = Json.parseToJsonElement(res).jsonObject
-        json["data"]?.jsonObject
+        return parseVmScalar(body)
+    }
+
+    private suspend fun queryVersion(job: String): String = try {
+        val body: String = http.get("$vmUrl/api/v1/query") {
+            parameter("query", """minecraft_status_healthy{job="$job"}""")
+        }.body()
+        Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
             ?.get("result")?.jsonArray
             ?.firstOrNull()?.jsonObject
             ?.get("metric")?.jsonObject
@@ -84,8 +92,7 @@ class SharedServiceImpl(private val vmUrl: String) :
     } catch (_: Exception) { "---" }
 
     private fun parseVmScalar(body: String): Double? = try {
-        val json = Json.parseToJsonElement(body).jsonObject
-        json["data"]?.jsonObject
+        Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
             ?.get("result")?.jsonArray
             ?.firstOrNull()?.jsonObject
             ?.get("value")?.jsonArray

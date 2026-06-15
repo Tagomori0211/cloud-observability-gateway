@@ -45,7 +45,7 @@ class MetricsModel {
   final String serverName;
   final String version;
   final PlayersInfo players;
-  final double tps;
+  final double latencyMs;
   final MemoryInfo memory;
   final double cpuUsage;
   final int uptimeSeconds;
@@ -55,7 +55,7 @@ class MetricsModel {
     required this.serverName,
     required this.version,
     required this.players,
-    required this.tps,
+    required this.latencyMs,
     required this.memory,
     required this.cpuUsage,
     required this.uptimeSeconds,
@@ -95,7 +95,7 @@ class MetricsModel {
           'Tagomori',
       version: json['version']?.toString() ?? '---',
       players: players,
-      tps: _toDouble(json['tps']),
+      latencyMs: _toDouble(json['latency_ms'] ?? json['tps']),
       memory: memory,
       cpuUsage: _toDouble(json['cpu_usage'] ?? json['cpu']),
       uptimeSeconds: _toInt(json['uptime'] ?? json['uptime_seconds']),
@@ -112,7 +112,7 @@ class MetricsModel {
         max: proto.playersMax,
         list: List<String>.from(proto.playerList),
       ),
-      tps: proto.tps,
+      latencyMs: proto.latencyMs,
       memory: MemoryInfo(usedMb: proto.memoryUsedMb, maxMb: proto.memoryMaxMb),
       cpuUsage: proto.cpuUsage,
       uptimeSeconds: proto.uptimeSeconds.toInt(),
@@ -125,7 +125,7 @@ class MetricsModel {
       serverName: 'Tagomori',
       version: '---',
       players: const PlayersInfo(online: 0, max: 0, list: []),
-      tps: 0,
+      latencyMs: 0,
       memory: const MemoryInfo(usedMb: 0, maxMb: 0),
       cpuUsage: 0,
       uptimeSeconds: 0,

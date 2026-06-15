@@ -11,14 +11,16 @@ class MetricsGrpcService {
     _client = MetricsServiceClient(channel);
   }
 
-  Future<MetricsModel> fetchMetrics() async {
-    final res = await _client.getMetrics(GetMetricsRequest());
+  Future<MetricsModel> fetchMetrics({bool bedrock = false}) async {
+    final req = GetMetricsRequest()
+      ..server = bedrock ? ServerType.BEDROCK : ServerType.JAVA;
+    final res = await _client.getMetrics(req);
     return MetricsModel.fromProto(res);
   }
 
-  Stream<MetricsModel> streamMetrics() {
-    return _client
-        .streamMetrics(GetMetricsRequest())
-        .map(MetricsModel.fromProto);
+  Stream<MetricsModel> streamMetrics({bool bedrock = false}) {
+    final req = GetMetricsRequest()
+      ..server = bedrock ? ServerType.BEDROCK : ServerType.JAVA;
+    return _client.streamMetrics(req).map(MetricsModel.fromProto);
   }
 }

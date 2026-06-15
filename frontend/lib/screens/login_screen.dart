@@ -15,7 +15,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
   final _service = MisskeyAuthService();
-  final _hostCtrl = TextEditingController(text: 'misskey.io');
 
   late final AnimationController _entranceCtrl;
   late final Animation<double> _logoOpacity;
@@ -68,7 +67,6 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void dispose() {
     _entranceCtrl.dispose();
-    _hostCtrl.dispose();
     super.dispose();
   }
 
@@ -93,18 +91,13 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    final raw = _hostCtrl.text.trim();
-    final host = raw.replaceAll(RegExp(r'^https?://'), '').replaceAll('/', '');
-    if (host.isEmpty) return;
-
     setState(() {
       _redirecting = true;
       _error = null;
     });
-    // Brief pause so loading state is visible before browser redirect
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
-    _service.startAuth(host);
+    _service.startAuth('Sushi.ski');
   }
 
   void _goToDashboard() {
@@ -143,7 +136,6 @@ class _LoginScreenState extends State<LoginScreen>
                         child: FadeTransition(
                           opacity: _formOpacity,
                           child: _LoginCard(
-                            hostController: _hostCtrl,
                             loading: _redirecting,
                             error: _error,
                             onLogin: _login,
@@ -226,13 +218,11 @@ class _LogoSection extends StatelessWidget {
 // ─── Login Card ───────────────────────────────────────────────────────────────
 
 class _LoginCard extends StatelessWidget {
-  final TextEditingController hostController;
   final bool loading;
   final String? error;
   final VoidCallback onLogin;
 
   const _LoginCard({
-    required this.hostController,
     required this.loading,
     required this.error,
     required this.onLogin,
@@ -276,7 +266,7 @@ class _LoginCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Misskey アカウントで認証します',
+            'Sushi.ski アカウントで認証します',
             style: TextStyle(
               color: Color(0xFF6E7681),
               fontFamily: 'monospace',
@@ -284,21 +274,6 @@ class _LoginCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 28),
-
-          // Instance input
-          const Text(
-            'INSTANCE',
-            style: TextStyle(
-              color: Color(0xFF8B949E),
-              fontFamily: 'monospace',
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _MinecraftTextField(controller: hostController, onSubmit: onLogin),
-          const SizedBox(height: 20),
 
           // Login button
           SizedBox(
@@ -356,72 +331,6 @@ class _LoginCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ─── Minecraft TextField ──────────────────────────────────────────────────────
-
-class _MinecraftTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onSubmit;
-
-  const _MinecraftTextField({
-    required this.controller,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      style: const TextStyle(
-        color: Color(0xFFF0F6FC),
-        fontFamily: 'monospace',
-        fontSize: 14,
-      ),
-      decoration: InputDecoration(
-        hintText: 'misskey.io',
-        hintStyle: const TextStyle(
-          color: Color(0xFF3D4451),
-          fontFamily: 'monospace',
-          fontSize: 14,
-        ),
-        filled: true,
-        fillColor: const Color(0xFF0D1117),
-        border: const OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFF30363D)),
-        ),
-        enabledBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFF30363D)),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFF22C55E), width: 1.5),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        prefixIcon: const Padding(
-          padding: EdgeInsets.only(left: 14, right: 6),
-          child: Text(
-            'https://',
-            style: TextStyle(
-              color: Color(0xFF3D4451),
-              fontFamily: 'monospace',
-              fontSize: 13,
-            ),
-          ),
-        ),
-        prefixIconConstraints:
-            const BoxConstraints(minWidth: 0, minHeight: 0),
-      ),
-      keyboardType: TextInputType.url,
-      autocorrect: false,
-      enableSuggestions: false,
-      textInputAction: TextInputAction.go,
-      onSubmitted: (_) => onSubmit(),
     );
   }
 }
@@ -707,9 +616,7 @@ class _BgPainter extends CustomPainter {
     // Floating pixel blocks
     for (final b in blocks) {
       final x = b.x * size.width;
-      // Floored-mod ensures positive y even when value goes negative
-      final frac =
-          ((b.baseY - time * b.speed) % 1.0 + 1.0) % 1.0;
+      final frac = ((b.baseY - time * b.speed) % 1.0 + 1.0) % 1.0;
       final y = frac * size.height;
       canvas.drawRect(
         Rect.fromCenter(
@@ -795,12 +702,10 @@ class _PortalRevealRoute extends PageRouteBuilder {
 
         return Stack(
           children: [
-            // Green glow ring at the expanding edge
             CustomPaint(
               painter: _GlowRingPainter(center: center, radius: r),
               child: const SizedBox.expand(),
             ),
-            // New page revealed inside the expanding circle
             ClipPath(
               clipper: _CircleClipper(center: center, radius: r),
               child: child!,
