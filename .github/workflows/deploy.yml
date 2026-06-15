@@ -180,8 +180,8 @@ jobs:
             --command="find ${DEPLOY_DIR} -mindepth 1 -not -name '.env' -delete 2>/dev/null; mkdir -p ${DEPLOY_DIR} && tar -xzf /tmp/bundle.tar.gz -C ${DEPLOY_DIR} && rm /tmp/bundle.tar.gz"
 
       # ---- コンテナ再構築 (IAP SSH) ----
-      # `down` は使わない（不要なダウンタイムを避ける）
-      # envoy.yaml は bind mount のため内容変更後は明示的 restart が必要
+      # down → up で全コンテナを確実に入れ替える。
+      # up --build だけでは Docker キャッシュが有効なとき api が再起動されないケースがあるため。
       - name: Rebuild containers on GCE A via IAP
         env:
           ZONE: ${{ secrets.GCE_ZONE }}
@@ -194,15 +194,13 @@ jobs:
               set -euo pipefail
               cd ${DEPLOY_DIR}
               # .env がなければ VM の SA (Secret Manager 読取可) で生成。
-              # VictoriaMetrics の URL は mc-monitoring-1 の VPC 内部 IP (terraform output で確認済み)。
-              # mc-proxy-sa に compute.instances.get がないため動的取得はしない。
               if [ ! -f .env ]; then
                 TOKEN=\$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)
                 printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://10.100.0.13:8428\n' \"\$TOKEN\" > .env
                 chmod 600 .env
               fi
+              docker compose down --remove-orphans
               docker compose up -d --build
-              docker compose restart envoy
               docker image prune -f
               echo '=== Deploy complete ===' && docker compose ps
             "
