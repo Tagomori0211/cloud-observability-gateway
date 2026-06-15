@@ -129,7 +129,7 @@ class _StatusScreenState extends State<StatusScreen> {
           Icon(Icons.dns, color: AppTheme.accentCyan, size: 22),
           const SizedBox(width: 10),
           Text(
-            'SUSHISKI STATUS',
+            'TAGOMORI STATUS',
             style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 18,

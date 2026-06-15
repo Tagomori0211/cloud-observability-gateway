@@ -3,16 +3,16 @@ import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const SushiskiStatusApp());
+  runApp(const TagomoriStatusApp());
 }
 
-class SushiskiStatusApp extends StatelessWidget {
-  const SushiskiStatusApp({super.key});
+class TagomoriStatusApp extends StatelessWidget {
+  const TagomoriStatusApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sushiski Status',
+      title: 'Tagomori Status',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const LoginScreen(),

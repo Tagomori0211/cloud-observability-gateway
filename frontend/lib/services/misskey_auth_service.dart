@@ -22,7 +22,7 @@ class MisskeyAuthResult {
 }
 
 class MisskeyAuthService {
-  static const _appName = 'Sushiski Status';
+  static const _appName = 'Tagomori Status';
 
   void startAuth(String host) {
     final session = _uuid();

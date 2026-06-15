@@ -181,7 +181,7 @@ class _LogoSection extends StatelessWidget {
             end: Alignment.bottomRight,
           ).createShader(bounds),
           child: const Text(
-            'SUSHISKI',
+            'TAGOMORI',
             style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 44,

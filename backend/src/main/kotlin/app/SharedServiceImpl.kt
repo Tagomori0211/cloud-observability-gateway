@@ -56,7 +56,7 @@ class SharedServiceImpl(private val vmUrl: String) :
 
             metricsResponse {
                 isOnline      = true
-                serverName    = "Sushiski"
+                serverName    = "Tagomori"
                 version       = queryVersion()
                 tps           = results["tps"] ?: 0.0
                 playersOnline = (results["players"] ?: 0.0).toInt()
@@ -67,7 +67,7 @@ class SharedServiceImpl(private val vmUrl: String) :
                 uptimeSeconds = (results["uptime"] ?: 0.0).toLong()
             }
         } catch (_: Exception) {
-            metricsResponse { isOnline = false; serverName = "Sushiski" }
+            metricsResponse { isOnline = false; serverName = "Tagomori" }
         }
     }
 

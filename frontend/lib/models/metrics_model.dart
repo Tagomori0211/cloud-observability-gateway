@@ -92,7 +92,7 @@ class MetricsModel {
       isOnline: isOnline,
       serverName: json['server_name']?.toString() ??
           json['name']?.toString() ??
-          'Sushiski',
+          'Tagomori',
       version: json['version']?.toString() ?? '---',
       players: players,
       tps: _toDouble(json['tps']),
@@ -105,7 +105,7 @@ class MetricsModel {
   factory MetricsModel.fromProto(MetricsResponse proto) {
     return MetricsModel(
       isOnline: proto.isOnline,
-      serverName: proto.serverName.isEmpty ? 'Sushiski' : proto.serverName,
+      serverName: proto.serverName.isEmpty ? 'Tagomori' : proto.serverName,
       version: proto.version.isEmpty ? '---' : proto.version,
       players: PlayersInfo(
         online: proto.playersOnline,
@@ -122,7 +122,7 @@ class MetricsModel {
   factory MetricsModel.offline() {
     return MetricsModel(
       isOnline: false,
-      serverName: 'Sushiski',
+      serverName: 'Tagomori',
       version: '---',
       players: const PlayersInfo(online: 0, max: 0, list: []),
       tps: 0,
