@@ -1,10 +1,13 @@
 package app
 
 import io.grpc.ServerBuilder
+import io.ktor.http.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.http.content.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.io.File
 
 fun main() {
     val vmUrl = System.getenv("VICTORIA_METRICS_URL") ?: "http://localhost:8428"
@@ -22,6 +25,20 @@ fun main() {
     // SPA fallback: unknown paths → index.html.
     embeddedServer(Netty, port = 8080) {
         routing {
+            // index.html と flutter_bootstrap.js はデプロイ毎に変わるため no-store を付加し
+            // Cloudflare エッジキャッシュ / ブラウザ HTTP キャッシュに古い JS が残るのを防ぐ。
+            get("/") {
+                call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+                call.respondFile(File("/app/web/index.html"))
+            }
+            get("/index.html") {
+                call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+                call.respondFile(File("/app/web/index.html"))
+            }
+            get("/flutter_bootstrap.js") {
+                call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+                call.respondFile(File("/app/web/flutter_bootstrap.js"))
+            }
             singlePageApplication {
                 useResources = false
                 filesPath = "/app/web"

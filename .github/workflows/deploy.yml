@@ -204,6 +204,29 @@ jobs:
               docker image prune -f
             "
 
+      # ---- Cloudflare キャッシュパージ (オプション) ----
+      # CF_API_TOKEN / CF_ZONE_ID を GitHub Secrets に設定すると有効になる。
+      # 設定方法:
+      #   CF_ZONE_ID    : Cloudflare Dashboard → ドメイン Overview → Zone ID
+      #   CF_API_TOKEN  : My Profile → API Tokens → "Zone:Cache Purge" 権限のみ付与
+      # 未設定の場合はこのステップをスキップする (if 条件で評価)。
+      - name: Purge Cloudflare cache
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          if [ -z "${CF_API_TOKEN}" ]; then
+            echo 'CF_API_TOKEN not set — skipping cache purge'
+            exit 0
+          fi
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' \
+            && echo 'Cloudflare cache purged.' \
+            || echo 'CF purge failed (non-fatal)'
+
       # ---- 起動確認 + ログ取得 ----
       # コンテナが安定するまで 15 秒待ってからログを取得する。
       # app.tagomori.dev への HTTP チェックも合わせて実施。
