@@ -1,4 +1,4 @@
-# sushiski Status Platform: 不変条件・開発ルール (GEMINI)
+# Tagomori Status Platform: 不変条件・開発ルール
 
 ## このリポジトリの不変条件（必ず守る）
 
@@ -12,8 +12,12 @@
 - 認証・連携 = REST（/api/*, :8080）。新機能はこちらにのみ足す。
 - /api は Envoy の既存 / 経路に相乗り。envoy.yaml は変更しない。
 
-### セキュリティ（ADR-002 / 009）
-- Misskey トークンを永続化しない。保存するのは misskey_id / host / username のみ。
+### 認証方式（ADR-010・最新）
+- MiAuth は**初回登録時の本人確認専用**。再ログインは ID（=Misskey username）/ パスワードで行う。
+- パスワードは bcrypt（jBCrypt）でハッシュ化し `users.password_hash` に保存。平文は保持・ログ出力しない。
+
+### セキュリティ（ADR-002 / 009 / 010）
+- Misskey トークンを永続化しない。保存するのは misskey_id / host / username / password_hash のみ。
 - MiAuth の host は sushi.ski に固定。callback の host を信用しない。
 - 秘密情報をコード・ログ・レスポンス・コミットに出さない。.env は読まない・書かない。
 - DB アクセスは repository 層経由のみ。SQL は prepared statement のみ（文字列連結禁止）。
@@ -27,7 +31,8 @@
 - ビルド(frontend): `cd frontend && flutter pub get && flutter build web --release`（--web-renderer 禁止）
 - 起動/再構築: `docker compose up -d --build`（docker-compose v1 禁止）
 - envoy 検証: `docker run --rm -v $(pwd)/deploy/envoy.yaml:/envoy.yaml envoyproxy/envoy:v1.31.5 --mode validate -c /envoy.yaml`
-- git push 禁止（デプロイは人間が main へ push して CI 実行）。
+- デプロイは CI/CD（main への push で自動実行）。
 
 ### 進め方
 - 本書に無いファイルは触らない。1コミット=1論点。迷ったら止まって人間に聞く。
+- 意思決定の根拠は `docs/ADR-account-linking.md`。本書と矛盾したら ADR を優先する。
