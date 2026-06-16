@@ -10,6 +10,20 @@ class MisskeyUser {
   String get displayName => (name?.isNotEmpty ?? false) ? name! : username;
 }
 
+class MiAuthRegisterResult {
+  final bool ok;
+  final String? username;
+  final bool needPassword;
+  final bool alreadyRegistered;
+
+  const MiAuthRegisterResult({
+    required this.ok,
+    this.username,
+    this.needPassword = false,
+    this.alreadyRegistered = false,
+  });
+}
+
 class MisskeyAuthService {
   static const _appName = 'Tagomori Status';
 
@@ -33,21 +47,28 @@ class MisskeyAuthService {
     web.window.history.replaceState(null, '', Uri.base.path);
   }
 
-  Future<MisskeyUser?> completeLogin(String session) async {
+  /// MiAuth はアカウント登録時の本人確認専用。ログインは ID/PASS で行う。
+  Future<MiAuthRegisterResult> completeRegister(String session) async {
     try {
       final res = await http.post(
-        Uri.parse('/api/auth/miauth/complete'),
+        Uri.parse('/api/auth/miauth/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'session': session}),
       );
-      if (res.statusCode != 200) return null;
+      if (res.statusCode == 409) {
+        return const MiAuthRegisterResult(ok: false, alreadyRegistered: true);
+      }
+      if (res.statusCode != 200) {
+        return const MiAuthRegisterResult(ok: false);
+      }
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      return MisskeyUser(
-        username: data['username'] as String? ?? '?',
-        name: null, // バックエンドからの応答に合わせて null に設定 (必要に応じて response.name などから)
+      return MiAuthRegisterResult(
+        ok: true,
+        username: data['username'] as String?,
+        needPassword: data['needPassword'] as bool? ?? false,
       );
     } catch (_) {
-      return null;
+      return const MiAuthRegisterResult(ok: false);
     }
   }
 

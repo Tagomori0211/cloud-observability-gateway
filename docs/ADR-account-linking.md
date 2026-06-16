@@ -4,7 +4,7 @@
 |---|---|
 | 対象システム | sushiski Status Platform（Flutter Web + Kotlin/Ktor + Envoy + Cloudflare Tunnel） |
 | 関連リポジトリ | フロント + backend（モノレポ） |
-| 最終更新 | 2026-06-15 (JST) |
+| 最終更新 | 2026-06-16 (JST) — ADR-010 追記により認証方式を変更 |
 | 起票 | 田籠 勇吉 / しなり |
 | 実装担当 | Claude Code (Sonnet) ※防護柵は別ファイル「作業指示書」で規定 |
 | スコープ | Misskey(MiAuth) でログインし、Java / Bedrock のゲーム内ユーザー名を紐付けて表示するマイページ機能の追加 |
@@ -24,8 +24,9 @@
 | ADR-005 | ゲーム内コマンドの実装場所 | ⛔ Superseded（ADR-004/006により不要化） |
 | ADR-006 | Bedrock 身元の扱い | ✅ Accepted |
 | ADR-007 | 新ロジックの設置場所 | ✅ Accepted |
-| ADR-008 | スキーマ設計 | ✅ Accepted |
-| ADR-009 | アカウントシステムの所有権モデル | ✅ Accepted |
+| ADR-008 | スキーマ設計 | ⚠️ Amended（ADR-010 により `password_hash` 列追加） |
+| ADR-009 | アカウントシステムの所有権モデル | ⚠️ Amended（ADR-010 により再ログイン手段が変更） |
+| ADR-010 | ログイン方式（MiAuth=初回登録専用 / ID・PASS=再ログイン） | ✅ Accepted（**最新・正**） |
 
 ---
 
@@ -119,14 +120,15 @@
 
 ## ADR-008 スキーマ設計
 
-- **ステータス**: ✅ Accepted
+- **ステータス**: ⚠️ Amended（2026-06-16, ADR-010 により `password_hash` 列を追加）
 - **日付**: 2026-06-15
 - **コンテキスト**: 将来性の確保と、綺麗なスキーマの両立。
 - **決定**: 正規化。中心 `users`（`misskey_id` キー）に対し、`linked_mc_accounts` を 1:N で持つ。セッションと監査を併設。
 
   ```
   users
-    id (PK), misskey_id (UQ), misskey_host, username, created_at, updated_at
+    id (PK), misskey_id (UQ), misskey_host, username (UQ),
+    password_hash (NULL許容・ADR-010で追加), created_at, updated_at
 
   linked_mc_accounts
     id (PK), user_id (FK->users), edition ('java'|'bedrock'),
@@ -147,7 +149,7 @@
 
 ## ADR-009 アカウントシステムの所有権モデル
 
-- **ステータス**: ✅ Accepted（2026-06-15 確認）
+- **ステータス**: ⚠️ Amended（2026-06-16, ADR-010 により再ログイン手段を変更。本体の決定（MiAuthは外部IdP・権威は自前バックエンド）自体は維持）
 - **日付**: 2026-06-15
 - **コンテキスト**: MiAuth で SNS ユーザーとゲーム内ユーザーを紐付けたい。MiAuth が提供するのは identity のみで、アカウント・セッション・連携データは提供しない。
 - **決定**: MiAuth を**外部IdP（ログイン手段）**として扱い、アカウント・セッションの権威は**自前バックエンド**が持つ（ソーシャルログイン → 自前アカウントパターン）。MiAuth は初回の identity 検証にのみ使用し、以降は自前セッション（ADR-001）で認証する。
@@ -156,6 +158,29 @@
 - **付随する設計変更（現コードからの差分）**:
   1. MiAuth の `POST /api/miauth/<session>/check` は**バックエンド側で実施**し、セッション Cookie を発行する（現状のフロント実施から移行）。
   2. callback の `host` は信用せず、**サーバー側で `sushi.ski` に固定（allowlist）**する。
+  3. **（ADR-010 で変更）** Cookie セッションが失効した後の再ログインは MiAuth の再実行ではなく ID/PASS で行う。MiAuth は初回登録時の本人確認専用に縮小。
+
+---
+
+## ADR-010 ログイン方式（MiAuth=初回登録専用 / ID・PASS=再ログイン）
+
+- **ステータス**: ✅ Accepted（**最新・正** — ADR-008/009 を上書きする）
+- **日付**: 2026-06-16
+- **コンテキスト**: MiAuth のみの認証だと、Cookie セッション失効後の再ログインのたびに Misskey インスタンス（sushi.ski）への往復・再承認が必要になり、UX 上望ましくない。また「sushi.ski が落ちている間は誰もログインできない」という外部可用性への強依存が生まれる。運用者（しなり）の判断により、**登録時に自前の ID/PASS を設定し、以降のログインはそれを使う**方式に変更する。
+- **決定**:
+  1. ログイン画面のボタンを **「MiAuthで登録」** と **「ログイン」** の2つに変更する。
+  2. 「MiAuthで登録」: MiAuth で sushi.ski 上の本人確認を行い（`POST /api/miauth/<session>/check`、ADR-009 と同様に host 固定）、`users` に upsert。**パスワード未設定の場合のみ**パスワード設定画面に遷移させ、ID（=Misskey の `username`）とパスワードを設定する。既にパスワード設定済みの場合は 409 を返し「登録済みなのでログインしてください」と案内する。
+  3. 「ログイン」: ID（=`username`）+ パスワードのみで認証する。MiAuth には一切アクセスしない。
+  4. パスワードは **bcrypt**（jBCrypt, cost factor デフォルト=10）でハッシュ化して `users.password_hash` に保存する。平文パスワードはレスポンス・ログに一切出さない。
+  5. ID は新規入力させず、**Misskey の `username` をそのまま使う**（`users.username` に既存の UNIQUE 制約を追加）。これにより ID 重複入力 UI が不要になり、sushi.ski 側のユーザー名一意性に相乗りできる。
+- **検討した代替案**:
+  - (A) MiAuth ログインのみを維持したまま session の有効期限を延ばす — sushi.ski への可用性依存が残る、根本解決にならない。
+  - (B) 新規にメールアドレス等の ID を入力させる — メール運用（確認送信等）が発生し本サービスの規模に対して過剰。
+- **帰結**:
+  - MiAuth は「初回の本人確認」専用に役割が縮小し、再ログインは自前認証に閉じる。
+  - DB スキーマに `password_hash`（NULL許容）を追加（ADR-008 Amended）。NULL のユーザーは「MiAuthでの本人確認は済んだがパスワード未設定」の状態を表す（= ログイン不可、登録フローの続行が必要）。
+  - 既存ユーザーは本機能リリース時点で存在しないため、移行（マイグレーション用バッチ等）は不要。
+  - **要追加検討**: パスワードリセット手段が未定義（現状は再度「MiAuthで登録」をやり直すしかない）。利用者数が増えた場合は別途検討する。
 
 ---
 
@@ -171,3 +196,4 @@
 
 1. **ADR-003 のバックアップ運用** — MariaDB 永続化ボリュームのバックアップ方式（mysqldump → GCS 等）。
 2. **DB 資格情報の注入経路** — v1 は手動で `~/app/.env` に登録（TUNNEL_TOKEN と同方式）。Secret Manager → cloud-init/Ansible への自動化は別タスク。
+3. **パスワードリセット手段（ADR-010）** — 現状未定義。利用者数が増えた場合に再検討。

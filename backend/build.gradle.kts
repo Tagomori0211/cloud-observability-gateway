@@ -54,6 +54,7 @@ dependencies {
     implementation("com.zaxxer:HikariCP:6.2.1")
     implementation("org.flywaydb:flyway-core:11.3.0")
     implementation("org.flywaydb:flyway-mysql:11.3.0")
+    implementation("org.mindrot:jbcrypt:0.4")
 }
 
 application {

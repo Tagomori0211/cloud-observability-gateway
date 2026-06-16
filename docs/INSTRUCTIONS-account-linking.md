@@ -228,11 +228,13 @@ CREATE TABLE link_audit (
 
 ### T3. バックエンド REST（`/api/*`）
 
-#### エンドポイント契約
+#### エンドポイント契約（ADR-010 反映済み — MiAuthは初回登録専用、再ログインはID/PASS）
 
 | メソッド | パス | 認証 | リクエスト | 成功 | 主なエラー |
 |---|---|---|---|---|---|
-| POST | `/api/auth/miauth/complete` | 不要 | `{"session":"<uuid>"}` | 200 `{user}` + `Set-Cookie: sid=…` | 400 形式不正 / 401 `ok:false` |
+| POST | `/api/auth/miauth/register` | 不要 | `{"session":"<uuid>"}` | 200 `{username, needPassword:true}`（Cookie発行なし） | 400 形式不正 / 401 MiAuth検証失敗 / 409 `already_registered` |
+| POST | `/api/auth/register/set-password` | 不要 | `{"username":"<id>","password":"<8文字以上>"}` | 200 `{user}` + `Set-Cookie: sid=…` | 400 短すぎ / 404 ユーザー無し / 409 設定済み |
+| POST | `/api/auth/login` | 不要 | `{"username":"<id>","password":"<pass>"}` | 200 `{user}` + `Set-Cookie: sid=…` | 401 認証情報不正 |
 | GET | `/api/me` | 要 | — | 200 `{user, accounts:[…]}` | 401 |
 | POST | `/api/logout` | 要 | — | 204（Cookie 失効 + session 行削除） | 401 |
 | POST | `/api/me/accounts` | 要 | `{"edition":"java"\|"bedrock","ign":"<name>"}` | 201 `{account}` | 400 / 409 重複 |

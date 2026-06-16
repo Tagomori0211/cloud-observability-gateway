@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/account_service.dart';
 import '../services/misskey_auth_service.dart';
 import 'mypage_screen.dart';
+import 'set_password_screen.dart';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
   final _service = MisskeyAuthService();
+  final _accountService = AccountService();
 
   late final AnimationController _entranceCtrl;
   late final Animation<double> _logoOpacity;
@@ -77,11 +80,20 @@ class _LoginScreenState extends State<LoginScreen>
     _service.cleanCallbackUrl();
     setState(() => _checking = true);
 
-    final result = await _service.completeLogin(cb.session!);
+    final result = await _service.completeRegister(cb.session!);
     if (!mounted) return;
 
-    if (result != null) {
-      _goToDashboard();
+    if (result.alreadyRegistered) {
+      setState(() {
+        _checking = false;
+        _error = '既に登録済みです。ログインしてください。';
+      });
+    } else if (result.ok && result.needPassword && result.username != null) {
+      Navigator.of(context).pushReplacement(
+        _PortalRevealRoute(
+          page: SetPasswordScreen(username: result.username!),
+        ),
+      );
     } else {
       setState(() {
         _checking = false;
@@ -90,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  Future<void> _login() async {
+  Future<void> _register() async {
     setState(() {
       _redirecting = true;
       _error = null;
@@ -98,6 +110,15 @@ class _LoginScreenState extends State<LoginScreen>
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
     _service.startAuth('Sushi.ski');
+  }
+
+  Future<bool> _doLogin(String username, String password) async {
+    final ok = await _accountService.login(username, password);
+    if (!mounted) return ok;
+    if (ok) {
+      _goToDashboard();
+    }
+    return ok;
   }
 
   void _goToDashboard() {
@@ -138,7 +159,8 @@ class _LoginScreenState extends State<LoginScreen>
                           child: _LoginCard(
                             loading: _redirecting,
                             error: _error,
-                            onLogin: _login,
+                            onRegister: _register,
+                            onLogin: _doLogin,
                           ),
                         ),
                       ),
@@ -217,19 +239,64 @@ class _LogoSection extends StatelessWidget {
 
 // ─── Login Card ───────────────────────────────────────────────────────────────
 
-class _LoginCard extends StatelessWidget {
+class _LoginCard extends StatefulWidget {
   final bool loading;
   final String? error;
-  final VoidCallback onLogin;
+  final VoidCallback onRegister;
+  final Future<bool> Function(String username, String password) onLogin;
 
   const _LoginCard({
     required this.loading,
     required this.error,
+    required this.onRegister,
     required this.onLogin,
   });
 
   @override
+  State<_LoginCard> createState() => _LoginCardState();
+}
+
+class _LoginCardState extends State<_LoginCard> {
+  bool _showLoginForm = false;
+  bool _submitting = false;
+  String? _formError;
+
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitLogin() async {
+    final username = _usernameCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    if (username.isEmpty || password.isEmpty) {
+      setState(() => _formError = 'IDとパスワードを入力してください');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _formError = null;
+    });
+
+    final ok = await widget.onLogin(username, password);
+    if (!mounted) return;
+
+    setState(() {
+      _submitting = false;
+      if (!ok) _formError = 'IDまたはパスワードが正しくありません';
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final error = _formError ?? widget.error;
+
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
@@ -253,7 +320,7 @@ class _LoginCard extends StatelessWidget {
                   color: Color(0xFF86EFAC), size: 20),
               SizedBox(width: 10),
               Text(
-                'Misskey でログイン',
+                'Tagomori Status へログイン',
                 style: TextStyle(
                   color: Color(0xFFF0F6FC),
                   fontFamily: 'monospace',
@@ -265,9 +332,11 @@ class _LoginCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Sushi.ski アカウントで認証します',
-            style: TextStyle(
+          Text(
+            _showLoginForm
+                ? 'ID とパスワードでログインします'
+                : '初めての方は MiAuth で本人確認して登録します',
+            style: const TextStyle(
               color: Color(0xFF6E7681),
               fontFamily: 'monospace',
               fontSize: 12,
@@ -275,15 +344,68 @@ class _LoginCard extends StatelessWidget {
           ),
           const SizedBox(height: 28),
 
-          // Login button
-          SizedBox(
-            width: double.infinity,
-            child: _MinecraftButton(
-              label: 'MiAuth でログイン',
-              onPressed: loading ? null : onLogin,
-              loading: loading,
+          if (_showLoginForm) ...[
+            _LoginField(controller: _usernameCtrl, label: 'ID'),
+            const SizedBox(height: 12),
+            _LoginField(controller: _passwordCtrl, label: 'パスワード', obscure: true),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: _MinecraftButton(
+                label: 'ログイン',
+                onPressed: _submitting ? null : _submitLogin,
+                loading: _submitting,
+              ),
             ),
-          ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                        _showLoginForm = false;
+                        _formError = null;
+                      }),
+              child: const Text(
+                '← 登録に戻る',
+                style: TextStyle(
+                  color: Color(0xFF6E7681),
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: _MinecraftButton(
+                label: 'MiAuth で登録',
+                onPressed: widget.loading ? null : widget.onRegister,
+                loading: widget.loading,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: widget.loading
+                    ? null
+                    : () => setState(() => _showLoginForm = true),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF30363D)),
+                ),
+                child: const Text(
+                  'ログイン',
+                  style: TextStyle(
+                    color: Color(0xFFF0F6FC),
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ),
+          ],
 
           // Error
           if (error != null) ...[
@@ -303,7 +425,7 @@ class _LoginCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      error!,
+                      error,
                       style: const TextStyle(
                         color: Color(0xFFFCA5A5),
                         fontFamily: 'monospace',
@@ -330,6 +452,40 @@ class _LoginCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LoginField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final bool obscure;
+
+  const _LoginField({
+    required this.controller,
+    required this.label,
+    this.obscure = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: Color(0xFFF0F6FC), fontFamily: 'monospace'),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF6E7681), fontFamily: 'monospace'),
+        border: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xFF30363D)),
+        ),
+        enabledBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xFF30363D)),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xFF22C55E)),
+        ),
       ),
     );
   }

@@ -55,4 +55,32 @@ class AccountService {
       return false;
     }
   }
+
+  /// MiAuth登録直後、まだパスワード未設定のユーザーに対して初回パスワードを設定する。
+  Future<bool> setPassword(String username, String password) async {
+    try {
+      final res = await _client.post(
+        Uri.parse('/api/auth/register/set-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// ID/PASSでのログイン。MiAuthは登録時の本人確認専用のため、以後はこちらのみを使う。
+  Future<bool> login(String username, String password) async {
+    try {
+      final res = await _client.post(
+        Uri.parse('/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }
