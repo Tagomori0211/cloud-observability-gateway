@@ -7,6 +7,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.util.*
+import io.ktor.util.pipeline.*
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Instant
@@ -31,10 +32,11 @@ object SessionAuth {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
-    fun intercept(context: PipelineContext<Unit, ApplicationCall>) {
+    suspend fun intercept(context: PipelineContext<Unit, ApplicationCall>) {
         val call = context.call
         val token = call.request.cookies[COOKIE_NAME]
         if (token == null) {
+            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
             context.finish()
             return
         }
@@ -46,12 +48,14 @@ object SessionAuth {
                 SessionRepository.deleteByTokenHash(tokenHash)
             }
             clearSessionCookie(call)
+            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
             context.finish()
             return
         }
 
         val user = UserRepository.findById(session.userId)
         if (user == null) {
+            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
             context.finish()
             return
         }
@@ -64,7 +68,7 @@ object SessionAuth {
             name = COOKIE_NAME,
             value = token,
             path = "/",
-            maxAge = SESSION_DURATION_SECONDS.toInt(),
+            maxAge = SESSION_DURATION_SECONDS,
             httpOnly = true,
             secure = true,
             extensions = mapOf("SameSite" to "Lax")
@@ -76,7 +80,7 @@ object SessionAuth {
             name = COOKIE_NAME,
             value = "",
             path = "/",
-            maxAge = 0,
+            maxAge = 0L,
             httpOnly = true,
             secure = true,
             extensions = mapOf("SameSite" to "Lax")

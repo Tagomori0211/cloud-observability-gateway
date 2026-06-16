@@ -51,3 +51,6 @@ infra/terraform/tfplan
 .claude/
 .agents/
 skills-lock.json
+
+# ---- Local Test Environment ----
+LocalTest/
