@@ -10,17 +10,6 @@ class MisskeyUser {
   String get displayName => (name?.isNotEmpty ?? false) ? name! : username;
 }
 
-class MisskeyAuthResult {
-  final String token;
-  final MisskeyUser user;
-  final String host;
-  const MisskeyAuthResult({
-    required this.token,
-    required this.user,
-    required this.host,
-  });
-}
-
 class MisskeyAuthService {
   static const _appName = 'Tagomori Status';
 
@@ -44,22 +33,18 @@ class MisskeyAuthService {
     web.window.history.replaceState(null, '', Uri.base.path);
   }
 
-  Future<MisskeyAuthResult?> checkSession(String host, String session) async {
+  Future<MisskeyUser?> completeLogin(String session) async {
     try {
       final res = await http.post(
-        Uri.parse('https://$host/api/miauth/$session/check'),
+        Uri.parse('/api/auth/miauth/complete'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'session': session}),
       );
       if (res.statusCode != 200) return null;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] != true) return null;
-      final u = data['user'] as Map<String, dynamic>;
-      return MisskeyAuthResult(
-        token: data['token'] as String,
-        user: MisskeyUser(
-          username: u['username'] as String? ?? '?',
-          name: u['name'] as String?,
-        ),
-        host: host,
+      return MisskeyUser(
+        username: data['username'] as String? ?? '?',
+        name: null, // バックエンドからの応答に合わせて null に設定 (必要に応じて response.name などから)
       );
     } catch (_) {
       return null;

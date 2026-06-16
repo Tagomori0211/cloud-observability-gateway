@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/misskey_auth_service.dart';
-import 'status_screen.dart';
+import 'mypage_screen.dart';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -72,12 +72,12 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _handleCallback() async {
     final cb = _service.getPendingCallback();
-    if (cb.session == null || cb.host == null) return;
+    if (cb.session == null) return;
 
     _service.cleanCallbackUrl();
     setState(() => _checking = true);
 
-    final result = await _service.checkSession(cb.host!, cb.session!);
+    final result = await _service.completeLogin(cb.session!);
     if (!mounted) return;
 
     if (result != null) {
@@ -102,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _goToDashboard() {
     Navigator.of(context).pushReplacement(
-      _PortalRevealRoute(page: const StatusScreen()),
+      _PortalRevealRoute(page: const MyPageScreen()),
     );
   }
 

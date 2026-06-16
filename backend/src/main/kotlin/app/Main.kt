@@ -1,14 +1,22 @@
 package app
 
+import app.db.Database
+import app.routes.authRoutes
+import app.routes.meRoutes
 import io.grpc.ServerBuilder
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.http.content.*
 import io.ktor.server.routing.*
 
 fun main() {
+    // ---- Database init ----
+    Database.init()
+
     val vmUrl = System.getenv("VICTORIA_METRICS_URL") ?: "http://localhost:8428"
 
     // ---- gRPC server :50051 ----
@@ -23,13 +31,25 @@ fun main() {
     // Flutter Web assets are bind-mounted to /app/web by docker-compose.
     // SPA fallback: unknown paths → index.html.
     embeddedServer(Netty, port = 8080) {
+        // ContentNegotiation (JSON) インストール
+        install(ContentNegotiation) {
+            json()
+        }
+
         // Flutter Web アセットはデプロイ毎に変わるため、全レスポンスに no-store を付加。
         // Cloudflare エッジ・ブラウザ HTTP キャッシュに main.dart.js 等が残るのを防ぐ。
         intercept(ApplicationCallPipeline.Plugins) {
             call.response.headers.append(HttpHeaders.CacheControl, "no-store")
             proceed()
         }
+
         routing {
+            // SPAフォールバックと衝突しないように、RESTルートを前に登録
+            route("/api") {
+                authRoutes()
+                meRoutes()
+            }
+
             singlePageApplication {
                 useResources = false
                 filesPath = "/app/web"

@@ -47,6 +47,13 @@ dependencies {
 
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.8")
+
+    // --- 追加（DB / REST 用）---
+    implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")  // サーバ側JSON
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.5.2")
+    implementation("com.zaxxer:HikariCP:6.2.1")
+    implementation("org.flywaydb:flyway-core:11.3.0")
+    implementation("org.flywaydb:flyway-mysql:11.3.0")
 }
 
 application {

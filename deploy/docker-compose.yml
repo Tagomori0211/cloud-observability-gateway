@@ -47,8 +47,34 @@ services:
       # 値は ~/app/.env の VICTORIA_METRICS_URL から自動ロード。
       # 設定元: cloud-init / Ansible が gcloud で mc-monitoring-1 の内部 IP を動的取得。
       VICTORIA_METRICS_URL: ${VICTORIA_METRICS_URL}
+      DB_URL: ${DB_URL}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
     volumes:
       # Flutter Web assets: rsync で更新、イメージ再ビルド不要。
       - ./web:/app/web:ro
+    depends_on:
+      - mariadb
     restart: unless-stopped
     # No ports: 8080 and 50051 are compose-network-internal only.
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: app-mariadb
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # ports は定義しない（compose ネットワーク内のみ）
+
+volumes:
+  mariadb-data:
