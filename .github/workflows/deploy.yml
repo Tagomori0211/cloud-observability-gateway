@@ -14,6 +14,10 @@
 #   GCE_SSH_USER     : VM への OS Login ユーザー名
 #                      (SA メールの @ 前部分: sa_<数字>_<hex>)
 #                      `gcloud compute os-login describe-profile --project=...` で確認
+#   DB_PASSWORD      : MariaDB の app ユーザーのパスワード（ADR-account-linking 用）。
+#                      api コンテナ(DB_PASSWORD)と mariadb コンテナ(MARIADB_PASSWORD)の
+#                      双方に同じ値を書き込む。未設定の場合は docker-compose.yml の
+#                      デフォルト値が両コンテナで一致した状態のまま使われる。
 #
 # Optional (Terraform job):
 #   TF_VAR_PROJECT_ID: var.project_id に渡す値 (= GCP_PROJECT_ID と同一で可)
@@ -185,6 +189,7 @@ jobs:
         env:
           ZONE: ${{ secrets.GCE_ZONE }}
           SSH_USER: ${{ secrets.GCE_SSH_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
             --zone="${ZONE}" \
@@ -192,11 +197,34 @@ jobs:
             --command="
               set -euo pipefail
               cd ${DEPLOY_DIR}
-              if [ ! -f .env ]; then
+              touch .env
+              chmod 600 .env
+
+              if ! grep -q '^TUNNEL_TOKEN=' .env; then
                 TOKEN=\$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)
-                printf 'TUNNEL_TOKEN=%s\nVICTORIA_METRICS_URL=http://10.100.0.13:8428\n' \"\$TOKEN\" > .env
-                chmod 600 .env
+                printf 'TUNNEL_TOKEN=%s\n' \"\$TOKEN\" >> .env
               fi
+              if ! grep -q '^VICTORIA_METRICS_URL=' .env; then
+                printf 'VICTORIA_METRICS_URL=http://10.100.0.13:8428\n' >> .env
+              fi
+
+              set_env_kv() {
+                key=\"\$1\"; val=\"\$2\"
+                [ -z \"\$val\" ] && return 0
+                if grep -q \"^\${key}=\" .env; then
+                  sed -i \"s|^\${key}=.*|\${key}=\${val}|\" .env
+                else
+                  printf '%s=%s\n' \"\$key\" \"\$val\" >> .env
+                fi
+              }
+              # DB_PASSWORD (api 接続用) と MARIADB_PASSWORD (mariadb 側ユーザー作成用) は
+              # 同じ値でなければ認証が通らないため、同一の GitHub Secret から両方に書き込む。
+              set_env_kv DB_USER 'app'
+              set_env_kv DB_PASSWORD '${DB_PASSWORD}'
+              set_env_kv MARIADB_DATABASE 'tagomori_status'
+              set_env_kv MARIADB_USER 'app'
+              set_env_kv MARIADB_PASSWORD '${DB_PASSWORD}'
+
               echo '>>> docker compose down'
               docker compose down --remove-orphans
               echo '>>> docker compose up'
