@@ -3,6 +3,7 @@ import com.google.protobuf.gradle.GenerateProtoTask
 
 plugins {
     kotlin("jvm") version "2.0.21"
+    kotlin("plugin.serialization") version "2.0.21"
     id("com.google.protobuf") version "0.9.4"
     id("com.github.johnrengelman.shadow") version "8.1.1"
     application
