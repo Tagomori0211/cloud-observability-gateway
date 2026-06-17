@@ -83,4 +83,17 @@ class AccountService {
       return false;
     }
   }
+
+  /// Pub/Sub 経由でサーバーに /list コマンドを発行させる。
+  /// [server]: "survival" | "bedrock" | "all"
+  /// 失敗しても例外を投げない（fire-and-forget）。
+  Future<void> triggerListCommand({String server = 'all'}) async {
+    try {
+      await _client.post(
+        Uri.parse('/api/mc/list-trigger'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'server': server}),
+      );
+    } catch (_) {}
+  }
 }

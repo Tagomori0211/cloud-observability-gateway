@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/metrics_model.dart';
+import '../services/account_service.dart';
 import '../services/metrics_grpc_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/metric_card.dart';
@@ -16,6 +17,7 @@ class StatusScreen extends StatefulWidget {
 
 class _StatusScreenState extends State<StatusScreen> {
   final _service = MetricsGrpcService();
+  final _accountService = AccountService();
 
   MetricsModel? _javaMetrics;
   MetricsModel? _bedrockMetrics;
@@ -83,6 +85,10 @@ class _StatusScreenState extends State<StatusScreen> {
   String? get _currentError => _tab == 0 ? _javaError : _bedrockError;
   DateTime? get _lastUpdated =>
       _tab == 0 ? _javaLastUpdated : _bedrockLastUpdated;
+  String get _currentServer => _tab == 0 ? 'survival' : 'bedrock';
+
+  Future<void> _triggerList() =>
+      _accountService.triggerListCommand(server: _currentServer);
 
   String _formatTime(DateTime? dt) {
     if (dt == null) return '---';
@@ -177,7 +183,9 @@ class _StatusScreenState extends State<StatusScreen> {
                   fontSize: 12,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              _ListTriggerButton(onPressed: _triggerList),
+              const SizedBox(width: 4),
               _RefreshButton(onPressed: _startStreams),
             ],
           ),
@@ -354,6 +362,61 @@ class _TabButton extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// Pub/Sub 経由で /list コマンドをトリガーするボタン
+class _ListTriggerButton extends StatefulWidget {
+  final Future<void> Function() onPressed;
+  const _ListTriggerButton({required this.onPressed});
+
+  @override
+  State<_ListTriggerButton> createState() => _ListTriggerButtonState();
+}
+
+class _ListTriggerButtonState extends State<_ListTriggerButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handle() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    _ctrl.repeat();
+    await widget.onPressed();
+    if (!mounted) return;
+    _ctrl.stop();
+    _ctrl.reset();
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _ctrl,
+      child: IconButton(
+        onPressed: _loading ? null : _handle,
+        icon: const Icon(Icons.group),
+        color: AppTheme.accentGreen,
+        iconSize: 20,
+        tooltip: 'プレイヤーリスト更新（/list）',
       ),
     );
   }

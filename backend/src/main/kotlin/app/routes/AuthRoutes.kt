@@ -3,6 +3,7 @@ package app.routes
 import app.auth.MiAuthClient
 import app.auth.PasswordHasher
 import app.auth.SessionAuth
+import app.pubsub.PubSubPublisher
 import app.repo.DbUser
 import app.repo.SessionRepository
 import app.repo.UserRepository
@@ -11,6 +12,7 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Instant
 
@@ -146,6 +148,9 @@ fun Route.authRoutes() {
             }
 
             startSession(call, user)
+
+            // ログイン時に /list コマンドをトリガー（サーバーコンソールにプレイヤー一覧を出力）
+            call.application.launch { PubSubPublisher.publish("all") }
 
             call.respond(HttpStatusCode.OK, UserResponse(
                 id = user.id,

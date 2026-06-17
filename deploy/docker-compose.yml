@@ -50,6 +50,8 @@ services:
       DB_URL: ${DB_URL:-jdbc:mariadb://mariadb:3306/tagomori_status}
       DB_USER: ${DB_USER:-app}
       DB_PASSWORD: ${DB_PASSWORD:-tagomori_internal_db_pass}
+      # projects/{project}/topics/{topic} 形式で設定。未設定時は publish をスキップ。
+      PUBSUB_TOPIC: ${PUBSUB_TOPIC:-}
     volumes:
       # Flutter Web assets: rsync で更新、イメージ再ビルド不要。
       - ./web:/app/web:ro

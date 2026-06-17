@@ -2,6 +2,7 @@ package app
 
 import app.db.Database
 import app.routes.authRoutes
+import app.routes.mcRoutes
 import app.routes.meRoutes
 import io.grpc.ServerBuilder
 import io.ktor.http.*
@@ -48,6 +49,7 @@ fun main() {
             route("/api") {
                 authRoutes()
                 meRoutes()
+                mcRoutes()
             }
 
             singlePageApplication {
