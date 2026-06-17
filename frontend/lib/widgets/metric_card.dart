@@ -8,8 +8,7 @@ class MetricCard extends StatelessWidget {
   final String? subValue;
   final IconData icon;
   final Color accentColor;
-  final double? progressValue;
-  final List<double>? sparkData;
+  final double? progressValue; // 0.0 – 1.0
 
   const MetricCard({
     super.key,
@@ -19,13 +18,10 @@ class MetricCard extends StatelessWidget {
     required this.icon,
     required this.accentColor,
     this.progressValue,
-    this.sparkData,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasSpark = sparkData != null && sparkData!.length >= 2;
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -33,72 +29,58 @@ class MetricCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(icon, color: accentColor, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
+                    Icon(icon, color: accentColor, size: 18),
+                    const SizedBox(width: 8),
                     Text(
-                      value,
+                      label,
                       style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.8,
                       ),
                     ),
-                    if (subValue != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subValue!,
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
-              ),
-              if (hasSpark) ...[
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  height: 50,
-                  child: _SparkLine(data: sparkData!, color: accentColor),
+                const SizedBox(height: 12),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+                if (subValue != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subValue!,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           if (progressValue != null) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 76,
+              height: 76,
+              child: _ArcGauge(
                 value: progressValue!.clamp(0.0, 1.0),
-                backgroundColor: AppTheme.surfaceColor,
-                valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                minHeight: 6,
+                color: accentColor,
               ),
             ),
           ],
@@ -108,76 +90,94 @@ class MetricCard extends StatelessWidget {
   }
 }
 
-class _SparkLine extends StatelessWidget {
-  final List<double> data;
+class _ArcGauge extends StatelessWidget {
+  final double value; // already clamped 0.0 – 1.0
   final Color color;
 
-  const _SparkLine({required this.data, required this.color});
+  const _ArcGauge({required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _SparkPainter(data: data, color: color),
-      child: const SizedBox.expand(),
+      painter: _ArcPainter(value: value, color: color),
+      child: Center(
+        child: Text(
+          '${(value * 100).toInt()}%',
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _SparkPainter extends CustomPainter {
-  final List<double> data;
+class _ArcPainter extends CustomPainter {
+  final double value;
   final Color color;
 
-  const _SparkPainter({required this.data, required this.color});
+  const _ArcPainter({required this.value, required this.color});
+
+  // 135° start (7:30 position) → 270° sweep → gap at top
+  static const _start = 135.0 * math.pi / 180.0;
+  static const _sweep = 270.0 * math.pi / 180.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.length < 2) return;
+    const stroke = 8.0;
+    final radius = size.shortestSide / 2 - stroke / 2 - 2;
+    final center = Offset(size.width / 2, size.height / 2);
+    final rect = Rect.fromCircle(center: center, radius: radius);
 
-    final minV = data.reduce(math.min);
-    final maxV = data.reduce(math.max);
-    final range = maxV - minV;
-
-    double normY(double v) =>
-        range == 0 ? size.height * 0.5 : (1 - (v - minV) / range) * size.height;
-
-    final pts = <Offset>[
-      for (int i = 0; i < data.length; i++)
-        Offset(i / (data.length - 1) * size.width, normY(data[i])),
-    ];
-
-    // Gradient fill below the line
-    final fillPath = Path()..moveTo(pts.first.dx, size.height);
-    for (final p in pts) fillPath.lineTo(p.dx, p.dy);
-    fillPath.lineTo(pts.last.dx, size.height);
-    fillPath.close();
-    canvas.drawPath(
-      fillPath,
+    // Background track
+    canvas.drawArc(
+      rect,
+      _start,
+      _sweep,
+      false,
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.35),
-            color.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+        ..color = AppTheme.surfaceColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round,
     );
 
-    // Line
-    final linePath = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (final p in pts.skip(1)) linePath.lineTo(p.dx, p.dy);
-    canvas.drawPath(
-      linePath,
+    if (value <= 0) return;
+
+    final fillSweep = _sweep * value;
+
+    // Glow
+    canvas.drawArc(
+      rect,
+      _start,
+      fillSweep,
+      false,
+      Paint()
+        ..color = color.withValues(alpha: 0.28)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke + 8
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
+    // Main arc
+    canvas.drawArc(
+      rect,
+      _start,
+      fillSweep,
+      false,
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = stroke
         ..strokeCap = StrokeCap.round,
     );
   }
 
   @override
-  bool shouldRepaint(_SparkPainter old) =>
-      old.data != data || old.color != color;
+  bool shouldRepaint(_ArcPainter old) =>
+      old.value != value || old.color != color;
 }

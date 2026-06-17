@@ -17,8 +17,8 @@ class StatusScreen extends StatefulWidget {
 class _StatusScreenState extends State<StatusScreen> {
   final _service = MetricsGrpcService();
 
-  final _javaHist = <MetricsModel>[];
-  final _bedrockHist = <MetricsModel>[];
+  MetricsModel? _javaMetrics;
+  MetricsModel? _bedrockMetrics;
 
   StreamSubscription<MetricsModel>? _javaSub;
   StreamSubscription<MetricsModel>? _bedrockSub;
@@ -28,8 +28,6 @@ class _StatusScreenState extends State<StatusScreen> {
   String? _bedrockError;
   DateTime? _javaLastUpdated;
   DateTime? _bedrockLastUpdated;
-
-  static const _histMax = 20;
 
   @override
   void initState() {
@@ -45,8 +43,7 @@ class _StatusScreenState extends State<StatusScreen> {
       (m) {
         if (!mounted) return;
         setState(() {
-          _javaHist.add(m);
-          if (_javaHist.length > _histMax) _javaHist.removeAt(0);
+          _javaMetrics = m;
           _javaError = null;
           _javaLastUpdated = DateTime.now();
         });
@@ -61,8 +58,7 @@ class _StatusScreenState extends State<StatusScreen> {
       (m) {
         if (!mounted) return;
         setState(() {
-          _bedrockHist.add(m);
-          if (_bedrockHist.length > _histMax) _bedrockHist.removeAt(0);
+          _bedrockMetrics = m;
           _bedrockError = null;
           _bedrockLastUpdated = DateTime.now();
         });
@@ -81,16 +77,12 @@ class _StatusScreenState extends State<StatusScreen> {
     super.dispose();
   }
 
-  List<MetricsModel> get _currentHist => _tab == 0 ? _javaHist : _bedrockHist;
   MetricsModel? get _currentMetrics =>
-      _currentHist.isEmpty ? null : _currentHist.last;
+      _tab == 0 ? _javaMetrics : _bedrockMetrics;
   bool get _loading => _currentMetrics == null;
   String? get _currentError => _tab == 0 ? _javaError : _bedrockError;
   DateTime? get _lastUpdated =>
       _tab == 0 ? _javaLastUpdated : _bedrockLastUpdated;
-
-  List<double> _spark(double Function(MetricsModel) extract) =>
-      _currentHist.map(extract).toList();
 
   String _formatTime(DateTime? dt) {
     if (dt == null) return '---';
@@ -293,7 +285,6 @@ class _StatusScreenState extends State<StatusScreen> {
         accentColor: AppTheme.accentGreen,
         progressValue:
             m.players.max > 0 ? m.players.online / m.players.max : 0,
-        sparkData: _spark((x) => x.players.online.toDouble()),
       );
 
   Widget _latencyCard(MetricsModel m) => MetricCard(
@@ -303,19 +294,17 @@ class _StatusScreenState extends State<StatusScreen> {
         accentColor: _latencyColor(m.latencyMs),
         progressValue:
             m.latencyMs > 0 ? (m.latencyMs / 500).clamp(0.0, 1.0) : null,
-        sparkData: _spark((x) => x.latencyMs),
       );
 
   Widget _memoryCard(MetricsModel m) => MetricCard(
         label: 'MEMORY',
         value: m.memory.maxMb > 0 ? '${m.memory.usedMb} MB' : '---',
         subValue: m.memory.maxMb > 0
-            ? '/ ${m.memory.maxMb} MB (${(m.memory.usagePercent * 100).toStringAsFixed(0)}%)'
+            ? '/ ${m.memory.maxMb} MB'
             : null,
         icon: Icons.memory,
         accentColor: AppTheme.accentPurple,
         progressValue: m.memory.maxMb > 0 ? m.memory.usagePercent : null,
-        sparkData: _spark((x) => x.memory.usagePercent),
       );
 
   Widget _cpuCard(MetricsModel m) => MetricCard(
@@ -325,7 +314,6 @@ class _StatusScreenState extends State<StatusScreen> {
         icon: Icons.developer_board,
         accentColor: AppTheme.accentAmber,
         progressValue: m.cpuUsage > 0 ? m.cpuUsage / 100 : null,
-        sparkData: _spark((x) => x.cpuUsage),
       );
 }
 
