@@ -37,20 +37,23 @@ class SharedServiceImpl(private val vmUrl: String) :
     }
 
     private suspend fun fetchFromVictoriaMetrics(server: ServerType): MetricsResponse {
-        // mc-monitor job ラベルとコンテナ名をサーバー種別で分岐する。
-        // CPU limit: Java = 4000m (4 コア) / Bedrock = 8000m (8 コア) — query.txt 準拠。
         val isBedrock  = server == ServerType.BEDROCK
         val job        = if (isBedrock) "bedrock"  else "survival"
         val container  = if (isBedrock) "bedrock"  else "minecraft"
         val cpuLimit   = if (isBedrock) 8          else 4
         val serverName = if (isBedrock) "Bedrock"  else "Java"
+        // kubernetes-cadvisor の共通セレクタ（query.txt §2-3 準拠）
+        val cav = """namespace="minecraft",container="$container",job="kubernetes-cadvisor""""
 
         return try {
-            // mc-monitor が報告するオンライン状態で判定する
             val healthy = vmQuery("""minecraft_status_healthy{job="$job"}""")
             if (healthy != 1.0) {
                 return metricsResponse { isOnline = false; this.serverName = serverName }
             }
+
+            val memUsed  = vmQuery("""container_memory_working_set_bytes{$cav}""") ?: 0.0
+            val memLimit = vmQuery("""container_spec_memory_limit_bytes{$cav}""")
+            val uptime   = vmQuery("""time() - container_start_time_seconds{$cav}""")
 
             metricsResponse {
                 isOnline      = true
@@ -59,14 +62,13 @@ class SharedServiceImpl(private val vmUrl: String) :
                 latencyMs     = vmQuery("""minecraft_status_latency_ms{job="$job"}""") ?: 0.0
                 playersOnline = (vmQuery("""minecraft_status_player_count{job="$job"}""") ?: 0.0).toInt()
                 playersMax    = (vmQuery("""minecraft_status_player_max{job="$job"}""")  ?: 0.0).toInt()
-                val memUsed   = vmQuery("""container_memory_working_set_bytes{namespace="minecraft",container="$container"}""")  ?: 0.0
-                val memMax    = vmQuery("""container_spec_memory_limit_bytes{namespace="minecraft",container="$container"}""")   ?: 0.0
                 memoryUsedMb  = (memUsed / 1_048_576).toInt()
-                memoryMaxMb   = (memMax  / 1_048_576).toInt()
+                // limit = 0 は k8s の「無制限」を意味する。その場合は 0 を返す
+                memoryMaxMb   = if ((memLimit ?: 0.0) > 0.0) (memLimit!! / 1_048_576).toInt() else 0
                 cpuUsage      = vmQuery(
-                    """rate(container_cpu_usage_seconds_total{namespace="minecraft",container="$container"}[5m]) / $cpuLimit * 100"""
+                    """rate(container_cpu_usage_seconds_total{$cav}[5m]) / $cpuLimit * 100"""
                 ) ?: 0.0
-                uptimeSeconds = 0L
+                uptimeSeconds = uptime?.toLong()?.coerceAtLeast(0L) ?: 0L
             }
         } catch (_: Exception) {
             metricsResponse { isOnline = false; this.serverName = serverName }
@@ -80,16 +82,28 @@ class SharedServiceImpl(private val vmUrl: String) :
         return parseVmScalar(body)
     }
 
-    private suspend fun queryVersion(job: String): String = try {
-        val body: String = http.get("$vmUrl/api/v1/query") {
-            parameter("query", """minecraft_status_healthy{job="$job"}""")
-        }.body()
-        Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
-            ?.get("result")?.jsonArray
-            ?.firstOrNull()?.jsonObject
-            ?.get("metric")?.jsonObject
-            ?.get("version")?.jsonPrimitive?.content ?: "---"
-    } catch (_: Exception) { "---" }
+    private suspend fun queryVersion(job: String): String {
+        // mc-monitor は version ラベルを minecraft_status_healthy に付与するバージョンと
+        // 付与しないバージョンがある。両メトリクスを順に試す。
+        val candidates = listOf(
+            """minecraft_status_healthy{job="$job"}""",
+            """minecraft_status_version{job="$job"}""",
+        )
+        for (q in candidates) {
+            val v = try {
+                val body: String = http.get("$vmUrl/api/v1/query") {
+                    parameter("query", q)
+                }.body()
+                Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
+                    ?.get("result")?.jsonArray
+                    ?.firstOrNull()?.jsonObject
+                    ?.get("metric")?.jsonObject
+                    ?.get("version")?.jsonPrimitive?.content
+            } catch (_: Exception) { null }
+            if (!v.isNullOrBlank()) return v
+        }
+        return "---"
+    }
 
     private fun parseVmScalar(body: String): Double? = try {
         Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
