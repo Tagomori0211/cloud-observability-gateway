@@ -59,9 +59,10 @@ class SharedServiceImpl(private val vmUrl: String) :
                 isOnline      = true
                 this.serverName = serverName
                 version       = queryVersion(job)
-                latencyMs     = vmQuery("""minecraft_status_latency_ms{job="$job"}""") ?: 0.0
-                playersOnline = (vmQuery("""minecraft_status_player_count{job="$job"}""") ?: 0.0).toInt()
-                playersMax    = (vmQuery("""minecraft_status_player_max{job="$job"}""")  ?: 0.0).toInt()
+                // response_time_seconds → ms 換算 (×1000)
+                latencyMs     = (vmQuery("""minecraft_status_response_time_seconds{job="$job"}""") ?: 0.0) * 1000.0
+                playersOnline = (vmQuery("""minecraft_status_players_online_count{job="$job"}""") ?: 0.0).toInt()
+                playersMax    = (vmQuery("""minecraft_status_players_max_count{job="$job"}""")  ?: 0.0).toInt()
                 memoryUsedMb  = (memUsed / 1_048_576).toInt()
                 // limit = 0 は k8s の「無制限」を意味する。その場合は 0 を返す
                 memoryMaxMb   = if ((memLimit ?: 0.0) > 0.0) (memLimit!! / 1_048_576).toInt() else 0
@@ -82,28 +83,17 @@ class SharedServiceImpl(private val vmUrl: String) :
         return parseVmScalar(body)
     }
 
-    private suspend fun queryVersion(job: String): String {
-        // mc-monitor は version ラベルを minecraft_status_healthy に付与するバージョンと
-        // 付与しないバージョンがある。両メトリクスを順に試す。
-        val candidates = listOf(
-            """minecraft_status_healthy{job="$job"}""",
-            """minecraft_status_version{job="$job"}""",
-        )
-        for (q in candidates) {
-            val v = try {
-                val body: String = http.get("$vmUrl/api/v1/query") {
-                    parameter("query", q)
-                }.body()
-                Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
-                    ?.get("result")?.jsonArray
-                    ?.firstOrNull()?.jsonObject
-                    ?.get("metric")?.jsonObject
-                    ?.get("version")?.jsonPrimitive?.content
-            } catch (_: Exception) { null }
-            if (!v.isNullOrBlank()) return v
-        }
-        return "---"
-    }
+    private suspend fun queryVersion(job: String): String = try {
+        val body: String = http.get("$vmUrl/api/v1/query") {
+            parameter("query", """minecraft_status_healthy{job="$job"}""")
+        }.body()
+        // mc-monitor は server_version ラベルにバージョン文字列を付与する（Bedrock は付与しない）
+        Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
+            ?.get("result")?.jsonArray
+            ?.firstOrNull()?.jsonObject
+            ?.get("metric")?.jsonObject
+            ?.get("server_version")?.jsonPrimitive?.content ?: "---"
+    } catch (_: Exception) { "---" }
 
     private fun parseVmScalar(body: String): Double? = try {
         Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
