@@ -18,6 +18,9 @@
 #                      api コンテナ(DB_PASSWORD)と mariadb コンテナ(MARIADB_PASSWORD)の
 #                      双方に同じ値を書き込む。未設定の場合は docker-compose.yml の
 #                      デフォルト値が両コンテナで一致した状態のまま使われる。
+#   PUBSUB_TOPIC     : Pub/Sub トピック名（projects/{project}/topics/{topic} 形式）。
+#                      ログイン・更新ボタン押下時に Minecraft /list をトリガーする。
+#                      未設定の場合は publish をスキップ（エラーにはならない）。
 #
 # Optional (Terraform job):
 #   TF_VAR_PROJECT_ID: var.project_id に渡す値 (= GCP_PROJECT_ID と同一で可)
@@ -190,6 +193,7 @@ jobs:
           ZONE: ${{ secrets.GCE_ZONE }}
           SSH_USER: ${{ secrets.GCE_SSH_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PUBSUB_TOPIC: ${{ secrets.PUBSUB_TOPIC }}
         run: |
           gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
             --zone="${ZONE}" \
@@ -224,6 +228,7 @@ jobs:
               set_env_kv MARIADB_DATABASE 'tagomori_status'
               set_env_kv MARIADB_USER 'app'
               set_env_kv MARIADB_PASSWORD '${DB_PASSWORD}'
+              set_env_kv PUBSUB_TOPIC '${PUBSUB_TOPIC}'
 
               echo '>>> docker compose down'
               docker compose down --remove-orphans
