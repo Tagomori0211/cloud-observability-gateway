@@ -4,8 +4,14 @@ import '../theme/app_theme.dart';
 
 class PlayerListCard extends StatelessWidget {
   final PlayersInfo players;
+  // Pub/Sub 経由で /list コマンドをトリガーするコールバック（null なら非表示）
+  final Future<void> Function()? onListRefresh;
 
-  const PlayerListCard({super.key, required this.players});
+  const PlayerListCard({
+    super.key,
+    required this.players,
+    this.onListRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +55,10 @@ class PlayerListCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onListRefresh != null) ...[
+                const SizedBox(width: 4),
+                _ListTriggerButton(onPressed: onListRefresh!),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -74,6 +84,64 @@ class PlayerListCard extends StatelessWidget {
                   .toList(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// Pub/Sub 経由で /list コマンドをトリガーするボタン（回転アニメ + 多重押下防止）
+class _ListTriggerButton extends StatefulWidget {
+  final Future<void> Function() onPressed;
+  const _ListTriggerButton({required this.onPressed});
+
+  @override
+  State<_ListTriggerButton> createState() => _ListTriggerButtonState();
+}
+
+class _ListTriggerButtonState extends State<_ListTriggerButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handle() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    _ctrl.repeat();
+    await widget.onPressed();
+    if (!mounted) return;
+    _ctrl.stop();
+    _ctrl.reset();
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _ctrl,
+      child: IconButton(
+        onPressed: _loading ? null : _handle,
+        icon: const Icon(Icons.refresh),
+        color: AppTheme.accentGreen,
+        iconSize: 18,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(4),
+        visualDensity: VisualDensity.compact,
+        tooltip: 'プレイヤーリスト更新（/list）',
       ),
     );
   }

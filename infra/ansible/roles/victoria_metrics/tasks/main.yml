@@ -1,7 +1,7 @@
 ---
 # Deploy VictoriaMetrics single-node on GCE B via Docker.
 # Data is persisted to /opt/victoria-metrics-data (survives container restarts).
-# Listens on :8428 — accessible from GCE A via VPC-internal IP only.
+# Listens on :8428 — accessible from APP-instance via VPC-internal IP only.
 
 - name: Create VictoriaMetrics data directory
   file:
@@ -43,7 +43,7 @@
 
 - name: Expose VictoriaMetrics on all VPC interfaces (not loopback)
   # The service above binds to 127.0.0.1 for safety.
-  # Override to the VPC interface so GCE A can reach it.
+  # Override to the VPC interface so APP-instance can reach it.
   lineinfile:
     path: /etc/systemd/system/victoria-metrics.service
     regexp: "p 127.0.0.1:8428:8428"

@@ -59,12 +59,12 @@
 - **ステータス**: ✅ Accepted
 - **日付**: 2026-06-15
 - **コンテキスト**: 複数ワールド → 複数ディメンション化に伴い **PlayerSync を廃止**するため、PlayerSync用の既存MariaDBは流用対象から外れる。連携データの書き込み元は Web 手動入力のみで、BDS（オンプレ）はこのDBに書かない。
-- **決定**: 新規 MariaDB を **GCE A の既存 docker-compose スタック**（cloudflared / envoy / api と同居）にサービスとして追加。Ktor バックエンドとは compose ネットワーク内部で接続する（ホストポート非公開）。
+- **決定**: 新規 MariaDB を **APP-instance の既存 docker-compose スタック**（cloudflared / envoy / api と同居）にサービスとして追加。Ktor バックエンドとは compose ネットワーク内部で接続する（ホストポート非公開）。
 - **検討した代替案**:
   - (A) Cloud SQL — マネージドだが月額増、FinOps 思想と逆行。
   - (C) 既存オンプレ k3s の MariaDB を流用 — PlayerSync 廃止で対象が消滅。
 - **帰結**: コスト追加最小、Ktor と同一ネットワークで低レイテンシかつ単純。
-  - **要追加定義**: 永続化ボリュームのバックアップ運用（GCE A の disk と DB ダンプ）。
+  - **要追加定義**: 永続化ボリュームのバックアップ運用（APP-instance の disk と DB ダンプ）。
   - **要追加定義**: `.env` への DB 資格情報の注入経路（v1は手動。将来 Secret Manager → cloud-init/Ansible）。
 
 ---

@@ -1,4 +1,4 @@
-# CI/CD: main push → (optional infra) → proto gen → Kotlin/Flutter build → GCE A deploy
+# CI/CD: main push → (optional infra) → proto gen → Kotlin/Flutter build → APP-instance deploy
 #
 # 接続方式: gcloud compute ssh --tunnel-through-iap
 #   既存インフラ (Minecraft-on-Kubenates) に合わせ、IAP 経由のみ。
@@ -168,7 +168,7 @@ jobs:
       # ---- ファイル転送 (gcloud compute scp + IAP) ----
       # 多数の小ファイルを個別 scp すると IAP トンネルのオーバーヘッドで激遅になるため、
       # tar 1 ファイルに固めて転送 → VM 側で展開する（接続も 2 回で済む）。
-      - name: Transfer bundle to GCE A via IAP
+      - name: Transfer bundle to APP-instance via IAP
         env:
           ZONE: ${{ secrets.GCE_ZONE }}
           SSH_USER: ${{ secrets.GCE_SSH_USER }}
@@ -188,7 +188,7 @@ jobs:
 
       # ---- コンテナ再構築 (IAP SSH) ----
       # down → up で全コンテナを確実に入れ替える。
-      - name: Rebuild containers on GCE A via IAP
+      - name: Rebuild containers on APP-instance via IAP
         env:
           ZONE: ${{ secrets.GCE_ZONE }}
           SSH_USER: ${{ secrets.GCE_SSH_USER }}
@@ -263,7 +263,7 @@ jobs:
       # ---- 起動確認 + ログ取得 ----
       # コンテナが安定するまで 15 秒待ってからログを取得する。
       # app.tagomori.dev への HTTP チェックも合わせて実施。
-      - name: Verify deployment on GCE A via IAP
+      - name: Verify deployment on APP-instance via IAP
         env:
           ZONE: ${{ secrets.GCE_ZONE }}
           SSH_USER: ${{ secrets.GCE_SSH_USER }}

@@ -375,9 +375,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
           ),
         ),
         onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const StatusScreen()),
-          );
+          // モニター画面から来た場合は pop で戻り、スタックの積み増しを防ぐ。
+          // 初回登録（SetPassword → MyPage）経由でスタックが浅い場合は push する。
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const StatusScreen()),
+            );
+          }
         },
       ),
     );

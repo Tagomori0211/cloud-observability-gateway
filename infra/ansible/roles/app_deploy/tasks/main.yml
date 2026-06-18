@@ -1,5 +1,5 @@
 ---
-# GCE A (tagomori-app) のアプリディレクトリ初期化 + .env 配置。
+# APP-instance (tagomori-app) のアプリディレクトリ初期化 + .env 配置。
 # - TUNNEL_TOKEN : Secret Manager (tagomori-tunnel-token) から取得
 # - VICTORIA_METRICS_URL : gcloud で mc-monitoring-1 の VPC 内部 IP を動的取得
 #

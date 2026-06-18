@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/player_list_card.dart';
 import '../widgets/server_status_card.dart';
+import 'mypage_screen.dart';
 
 class StatusScreen extends StatefulWidget {
   const StatusScreen({super.key});
@@ -90,6 +91,12 @@ class _StatusScreenState extends State<StatusScreen> {
   Future<void> _triggerList() =>
       _accountService.triggerListCommand(server: _currentServer);
 
+  void _openMyPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MyPageScreen()),
+    );
+  }
+
   String _formatTime(DateTime? dt) {
     if (dt == null) return '---';
     final h = dt.hour.toString().padLeft(2, '0');
@@ -146,7 +153,7 @@ class _StatusScreenState extends State<StatusScreen> {
                         ? _buildMetricsGridMobile(m)
                         : _buildMetricsGridNarrow(m),
                 const SizedBox(height: 20),
-                PlayerListCard(players: m.players),
+                PlayerListCard(players: m.players, onListRefresh: _triggerList),
                 const SizedBox(height: 40),
               ]),
             ),
@@ -184,7 +191,7 @@ class _StatusScreenState extends State<StatusScreen> {
                 ),
               ),
               const SizedBox(width: 4),
-              _ListTriggerButton(onPressed: _triggerList),
+              _MyPageButton(onPressed: _openMyPage),
               const SizedBox(width: 4),
               _RefreshButton(onPressed: _startStreams),
             ],
@@ -367,57 +374,19 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-// Pub/Sub 経由で /list コマンドをトリガーするボタン
-class _ListTriggerButton extends StatefulWidget {
-  final Future<void> Function() onPressed;
-  const _ListTriggerButton({required this.onPressed});
-
-  @override
-  State<_ListTriggerButton> createState() => _ListTriggerButtonState();
-}
-
-class _ListTriggerButtonState extends State<_ListTriggerButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handle() async {
-    if (_loading) return;
-    setState(() => _loading = true);
-    _ctrl.repeat();
-    await widget.onPressed();
-    if (!mounted) return;
-    _ctrl.stop();
-    _ctrl.reset();
-    setState(() => _loading = false);
-  }
+// マイページへ遷移するボタン（IGN 追加連携・ログアウト用）
+class _MyPageButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _MyPageButton({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: _ctrl,
-      child: IconButton(
-        onPressed: _loading ? null : _handle,
-        icon: const Icon(Icons.group),
-        color: AppTheme.accentGreen,
-        iconSize: 20,
-        tooltip: 'プレイヤーリスト更新（/list）',
-      ),
+    return IconButton(
+      onPressed: onPressed,
+      icon: const Icon(Icons.account_circle),
+      color: AppTheme.accentGreen,
+      iconSize: 20,
+      tooltip: 'マイページ（IGN連携）',
     );
   }
 }

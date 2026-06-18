@@ -2,8 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/account_service.dart';
 import '../services/misskey_auth_service.dart';
-import 'mypage_screen.dart';
 import 'set_password_screen.dart';
+import 'status_screen.dart';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -122,8 +122,10 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _goToDashboard() {
+    // 登録済みユーザーの再ログインはモニター画面へ直行する。
+    // IGN の追加連携はモニター画面のマイページボタンから任意のタイミングで行う。
     Navigator.of(context).pushReplacement(
-      _PortalRevealRoute(page: const MyPageScreen()),
+      _PortalRevealRoute(page: const StatusScreen()),
     );
   }
 

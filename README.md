@@ -102,7 +102,7 @@ flowchart TD
 
 | リソース | 役割 | 管理元 |
 |---|---|---|
-| 🖥️ **GCE A**（`tagomori-app`） | cloudflared + Envoy + Ktor の3コンテナを Docker Compose で運用 | ✅ 本リポジトリの Terraform が作成 |
+| 🖥️ **APP-instance**（`tagomori-app`） | cloudflared + Envoy + Ktor の3コンテナを Docker Compose で運用 | ✅ 本リポジトリの Terraform が作成 |
 | 📊 **GCE B**（`mc-monitoring-1`） | VictoriaMetrics + Grafana | 🔒 **既存リソース**（Minecraft-on-Kubenates 管理）。本リポジトリでは触らない |
 
 ### ネットワーク / セキュリティ設計
@@ -134,7 +134,7 @@ flowchart TD
 │   ├── envoy.yaml                # gRPC-Web 変換 / パスルーティング
 │   └── Dockerfile.api            # fat JAR を載せる薄いイメージ
 ├── infra/
-│   ├── terraform/                # GCE A・ファイアウォール・Secret skeleton・CI SA
+│   ├── terraform/                # APP-instance・ファイアウォール・Secret skeleton・CI SA
 │   ├── cloud-init/tagomori-app.yaml  # 初回プロビジョニング（Docker/Tailscale/.env）
 │   └── ansible/                  # ドリフト修正・再適用用（docker/tailscale/app_deploy ロール）
 └── .github/workflows/deploy.yml  # CI/CD（IAP SSH 経由デプロイ）
@@ -146,7 +146,7 @@ flowchart TD
 
 | シークレット | 保管場所 | 備考 |
 |---|---|---|
-| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | cloud-init / Ansible が GCE A の `~/app/.env`（mode 600）に展開。git 管理外・rsync 除外 |
+| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | cloud-init / Ansible が APP-instance の `~/app/.env`（mode 600）に展開。git 管理外・rsync 除外 |
 | `VICTORIA_METRICS_URL` | 📄 `~/app/.env`（自動生成） | `mc-monitoring-1` の VPC 内部 IP を gcloud で動的取得 |
 | CI 用 SA キー | 🐙 GitHub Secrets: `GCP_CI_SA_KEY` | `terraform output -raw ci_sa_key_b64` で取得 |
 | Tailscale auth key | 🗄️ Secret Manager: `tailscale-auth-key`（既存・共有） | 既存インフラと同一パターン |
@@ -230,9 +230,9 @@ docker run --rm -v $(pwd)/deploy/envoy.yaml:/envoy.yaml envoyproxy/envoy:v1.31.5
 
 | # | 確認項目 | コマンド / 手順 | 期待結果 |
 |---|---|---|---|
-| 1 | 🌩️ Tunnel 接続 | （GCE A 上で）`docker compose logs cloudflared` | `Registered tunnel connection` が出る |
+| 1 | 🌩️ Tunnel 接続 | （APP-instance 上で）`docker compose logs cloudflared` | `Registered tunnel connection` が出る |
 | 2 | 📄 静的配信 | `curl -I https://app.tagomori.dev/` | `200` + `text/html`、`cf-ray` ヘッダ付きなら CF 経由 |
-| 3 | 📊 VictoriaMetrics 到達 | （GCE A 上で）`source ~/app/.env && curl -s "${VICTORIA_METRICS_URL}/health"` | `OK` |
+| 3 | 📊 VictoriaMetrics 到達 | （APP-instance 上で）`source ~/app/.env && curl -s "${VICTORIA_METRICS_URL}/health"` | `OK` |
 | 4 | 📡 gRPC-Web ルーティング | ブラウザ DevTools > Network で `/shared.MetricsService/GetMetrics` を確認 | `Content-Type: application/grpc-web+proto` で `200` |
 
 ---

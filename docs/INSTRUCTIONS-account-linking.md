@@ -50,7 +50,7 @@
 
 ### 2-1. やること（in scope）
 
-- **DB**: GCE A の既存 `deploy/docker-compose.yml` に MariaDB を1サービス追加（ADR-003）。
+- **DB**: APP-instance の既存 `deploy/docker-compose.yml` に MariaDB を1サービス追加（ADR-003）。
 - **スキーマ**: Flyway マイグレーション（`users` / `linked_mc_accounts` / `sessions` / `link_audit`）（ADR-008）。
 - **バックエンド**: 既存 Ktor に **REST ルート `/api/*`** を追加（認証・マイページ・連携）（ADR-007/009）。
 - **フロント**: MiAuth 完了処理をバックエンド呼び出しへ移行し、マイページ画面を追加（ADR-009）。

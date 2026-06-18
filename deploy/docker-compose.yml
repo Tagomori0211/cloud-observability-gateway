@@ -1,4 +1,4 @@
-# Runtime stack on GCE A (tagomori-app): cloudflared + Envoy + Ktor (3 containers).
+# Runtime stack on APP-instance (tagomori-app): cloudflared + Envoy + Ktor (3 containers).
 #
 # Prerequisites (manual, one-time):
 #   - Cloudflare Zero Trust: create Tunnel, TUNNEL_TOKEN を Secret Manager
