@@ -53,9 +53,10 @@ write_files:
     permissions: "0755"
     content: |
       #!/bin/bash
+      # e2-micro(1GB) 運用のため 2GB swap を確保（RAM スパイク時の OOM 保険）。
       set -e
       if [[ ! -f /swap.img ]]; then
-        fallocate -l 1G /swap.img
+        fallocate -l 2G /swap.img
         chmod 600 /swap.img
         mkswap /swap.img
         swapon /swap.img

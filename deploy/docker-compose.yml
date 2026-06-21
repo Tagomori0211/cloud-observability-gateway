@@ -59,6 +59,10 @@ services:
     depends_on:
       - mariadb
     restart: unless-stopped
+    # e2-micro(1GB) 向け: JVM をコンテナ単位で封じ込め、ホスト OOM を防ぐ。
+    # 超過時は api コンテナのみ再起動（restart: unless-stopped）でホストは安全。
+    # Dockerfile.api の -XX:MaxRAMPercentage=65.0 がこの 384m を基準にヒープを決定。
+    mem_limit: 384m
     # No ports: 8080 and 50051 are compose-network-internal only.
 
   mariadb:

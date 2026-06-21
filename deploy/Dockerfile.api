@@ -10,4 +10,7 @@ COPY app.jar /app/app.jar
 # Both are only reachable inside the compose network — no host port binding.
 EXPOSE 8080 50051
 
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]
+# MaxRAMPercentage はコンテナの mem_limit を基準に解釈される（compose で 384m 制限）。
+# 65% でヒープ上限 ≈250MB、残りを metaspace/スレッド/direct buffer に確保。
+# e2-micro(1GB) でもホスト総量ではなくコンテナ上限に追従するため OOM を封じ込める。
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=65.0", "-jar", "/app/app.jar"]

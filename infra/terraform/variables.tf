@@ -16,9 +16,9 @@ variable "zone" {
 }
 
 variable "machine_type" {
-  description = "GCE A (tagomori-app) のマシンタイプ"
+  description = "GCE A (tagomori-app) のマシンタイプ。CPU はほぼ idle のため e2-micro(1GB) に縮小。RAM 余裕は swap 2GB + api の mem_limit/JVM ヒープ上限で確保する。"
   type        = string
-  default     = "e2-small"
+  default     = "e2-micro"
 }
 
 variable "github_repo" {

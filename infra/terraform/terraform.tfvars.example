@@ -5,4 +5,4 @@
 # region / zone も既存インフラに合わせて asia-northeast1-b 固定。
 
 project_id   = "your-gcp-project-id"
-machine_type = "e2-small"
+machine_type = "e2-micro"
