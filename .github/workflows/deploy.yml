@@ -155,6 +155,7 @@ jobs:
           cp -r frontend/build/web/.       bundle/web/
           cp deploy/docker-compose.yml     bundle/
           cp deploy/envoy.yaml             bundle/
+          cp deploy/vmagent-scrape.yml     bundle/
 
       # ---- GCP 認証 (IAP SSH に必要) ----
       - id: auth

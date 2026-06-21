@@ -1,0 +1,29 @@
+# vmagent scrape config — tagomori-app の自己メトリクスを収集し、
+# VPC 内の VictoriaMetrics (mc-monitoring-1:8428) へ remote_write する。
+#
+# remote_write 先は docker-compose の vmagent サービスで
+#   -remoteWrite.url=${VICTORIA_METRICS_URL}/api/v1/write
+# として注入される（VICTORIA_METRICS_URL は ~/app/.env から自動ロード）。
+#
+# 収集対象は compose ネットワーク内のサービス名で解決する。
+# 全シリーズに instance="tagomori-app" を付与し、GCE B 側の系列と区別する。
+
+global:
+  scrape_interval: 30s
+  external_labels:
+    source: tagomori-app
+
+scrape_configs:
+  # ---- ホスト（GCE A）のCPU/メモリ/ディスク/ネットワーク ----
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          instance: tagomori-app
+
+  # ---- vmagent 自身の稼働状況（remote_write の成否監視用） ----
+  - job_name: vmagent
+    static_configs:
+      - targets: ["localhost:8429"]
+        labels:
+          instance: tagomori-app

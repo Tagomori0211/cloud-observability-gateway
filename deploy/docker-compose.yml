@@ -1,4 +1,5 @@
-# Runtime stack on APP-instance (tagomori-app): cloudflared + Envoy + Ktor (3 containers).
+# Runtime stack on APP-instance (tagomori-app): cloudflared + Envoy + Ktor + MariaDB
+# + metrics export (node-exporter + vmagent).
 #
 # Prerequisites (manual, one-time):
 #   - Cloudflare Zero Trust: create Tunnel, TUNNEL_TOKEN を Secret Manager
@@ -78,5 +79,42 @@ services:
     restart: unless-stopped
     # ports は定義しない（compose ネットワーク内のみ）
 
+  # ---- ホストメトリクス収集（CPU/メモリ/ディスク/ネットワーク） ----
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: app-node-exporter
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    volumes:
+      - type: bind
+        source: /
+        target: /host
+        read_only: true
+        bind:
+          propagation: rslave
+    restart: unless-stopped
+    # ports は定義しない（vmagent が compose ネットワーク内で :9100 をスクレイプ）
+
+  # ---- メトリクスエクスポーター：自己メトリクスを VictoriaMetrics へ remote_write ----
+  # 送信先 mc-monitoring-1:8428 へは VPC 内部経由で到達。
+  # ファイアウォール: tak-vpc-allow-vm-8428-from-tagomori (tagomori → minecraft タグ)。
+  # VICTORIA_METRICS_URL は ~/app/.env から自動ロード（api サービスと共用）。
+  vmagent:
+    image: victoriametrics/vmagent:v1.103.0
+    container_name: app-vmagent
+    command:
+      - "-promscrape.config=/etc/vmagent/scrape.yml"
+      - "-remoteWrite.url=${VICTORIA_METRICS_URL}/api/v1/write"
+      - "-remoteWrite.tmpDataPath=/vmagentdata"
+    volumes:
+      - ./vmagent-scrape.yml:/etc/vmagent/scrape.yml:ro
+      - vmagent-data:/vmagentdata
+    depends_on:
+      - node-exporter
+    restart: unless-stopped
+    # No ports: scrape/remote-write のみ。外部公開不要。
+
 volumes:
   mariadb-data:
+  vmagent-data:
