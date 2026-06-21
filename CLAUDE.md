@@ -32,6 +32,7 @@
 - 起動/再構築: `docker compose up -d --build`（docker-compose v1 禁止）
 - envoy 検証: `docker run --rm -v $(pwd)/deploy/envoy.yaml:/envoy.yaml envoyproxy/envoy:v1.31.5 --mode validate -c /envoy.yaml`
 - デプロイは CI/CD（main への push で自動実行）。
+- main へ push したら、毎回 `gh` で CI/CD の進捗を確認・報告する（例: `gh run watch` / `gh run list`）。完了・失敗まで見届ける。
 
 ### 進め方
 - 本書に無いファイルは触らない。1コミット=1論点。迷ったら止まって人間に聞く。
