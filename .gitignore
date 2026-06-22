@@ -48,9 +48,9 @@ infra/terraform/tfplan
 # infra/ansible/group_vars/gce_a/vault.yml
 
 # ---- Claude Code internal ----
-.claude/
-.agents/
-skills-lock.json
+.claude/settings.local.json
+.agents/skills/dart*
+.agents/skills/flutter*
 
 # ---- Local Test Environment ----
 LocalTest/

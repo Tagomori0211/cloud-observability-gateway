@@ -2,6 +2,10 @@
 
 ## このリポジトリの不変条件（必ず守る）
 
+
+## インフラデプロイチェックリスト
+- このプロジェクトはOS Login付きセルフホストCIランナー経由でGCEにデプロイする。必ず以下を確認すること：(1) deploy.ymlにDB_PASSWORDなど必要なシークレットが実際に書き込まれているか、(2) OS LoginユーザーがusermodでDockerグループに追加されているか、(3) ランナーにunzip/jqがインストール済みか、(4) .envファイルがOS Loginユーザーの正しいホームディレクトリに配置されているか。
+
 ### 正規名称（勝手に改名しない）
 - VM=tagomori-app / ドメイン=app.tagomori.dev / Flutterパッケージ=tagomori_status_frontend
 - 新規DB名=tagomori_status / DBユーザー=app / composeサービス=mariadb
@@ -33,7 +37,10 @@
 - envoy 検証: `docker run --rm -v $(pwd)/deploy/envoy.yaml:/envoy.yaml envoyproxy/envoy:v1.31.5 --mode validate -c /envoy.yaml`
 - デプロイは CI/CD（main への push で自動実行）。
 - main へ push したら、毎回 `gh` で CI/CD の進捗を確認・報告する（例: `gh run watch` / `gh run list`）。完了・失敗まで見届ける。
+- skill-deployを実行
 
 ### 進め方
 - 本書に無いファイルは触らない。1コミット=1論点。迷ったら止まって人間に聞く。
 - 意思決定の根拠は `docs/ADR-account-linking.md`。本書と矛盾したら ADR を優先する。
+
+
