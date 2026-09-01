@@ -20,16 +20,11 @@ class _StatusScreenState extends State<StatusScreen> {
   final _service = MetricsGrpcService();
   final _accountService = AccountService();
 
-  MetricsModel? _javaMetrics;
   MetricsModel? _bedrockMetrics;
 
-  StreamSubscription<MetricsModel>? _javaSub;
   StreamSubscription<MetricsModel>? _bedrockSub;
 
-  int _tab = 0; // 0 = Java, 1 = Bedrock
-  String? _javaError;
   String? _bedrockError;
-  DateTime? _javaLastUpdated;
   DateTime? _bedrockLastUpdated;
 
   @override
@@ -39,23 +34,7 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   void _startStreams() {
-    _javaSub?.cancel();
     _bedrockSub?.cancel();
-
-    _javaSub = _service.streamMetrics(bedrock: false).listen(
-      (m) {
-        if (!mounted) return;
-        setState(() {
-          _javaMetrics = m;
-          _javaError = null;
-          _javaLastUpdated = DateTime.now();
-        });
-      },
-      onError: (e) {
-        if (!mounted) return;
-        setState(() => _javaError = e.toString());
-      },
-    );
 
     _bedrockSub = _service.streamMetrics(bedrock: true).listen(
       (m) {
@@ -75,18 +54,15 @@ class _StatusScreenState extends State<StatusScreen> {
 
   @override
   void dispose() {
-    _javaSub?.cancel();
     _bedrockSub?.cancel();
     super.dispose();
   }
 
-  MetricsModel? get _currentMetrics =>
-      _tab == 0 ? _javaMetrics : _bedrockMetrics;
+  MetricsModel? get _currentMetrics => _bedrockMetrics;
   bool get _loading => _currentMetrics == null;
-  String? get _currentError => _tab == 0 ? _javaError : _bedrockError;
-  DateTime? get _lastUpdated =>
-      _tab == 0 ? _javaLastUpdated : _bedrockLastUpdated;
-  String get _currentServer => _tab == 0 ? 'survival' : 'bedrock';
+  String? get _currentError => _bedrockError;
+  DateTime? get _lastUpdated => _bedrockLastUpdated;
+  String get _currentServer => 'bedrock';
 
   Future<void> _triggerList() =>
       _accountService.triggerListCommand(server: _currentServer);
@@ -166,52 +142,31 @@ class _StatusScreenState extends State<StatusScreen> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(Icons.dns, color: AppTheme.accentCyan, size: 22),
-              const SizedBox(width: 10),
-              Text(
-                'TAGOMORI STATUS',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '更新: ${_formatTime(_lastUpdated)}',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 4),
-              _MyPageButton(onPressed: _openMyPage),
-              const SizedBox(width: 4),
-              _RefreshButton(onPressed: _startStreams),
-            ],
+          Icon(Icons.dns, color: AppTheme.accentCyan, size: 22),
+          const SizedBox(width: 10),
+          Text(
+            'TAGOMORI STATUS',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _TabButton(
-                label: 'Java',
-                selected: _tab == 0,
-                onTap: () => setState(() => _tab = 0),
-              ),
-              const SizedBox(width: 6),
-              _TabButton(
-                label: 'Bedrock',
-                selected: _tab == 1,
-                onTap: () => setState(() => _tab = 1),
-              ),
-            ],
+          const Spacer(),
+          Text(
+            '更新: ${_formatTime(_lastUpdated)}',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
+            ),
           ),
+          const SizedBox(width: 4),
+          _MyPageButton(onPressed: _openMyPage),
+          const SizedBox(width: 4),
+          _RefreshButton(onPressed: _startStreams),
         ],
       ),
     );
@@ -330,48 +285,6 @@ class _StatusScreenState extends State<StatusScreen> {
         accentColor: AppTheme.accentAmber,
         progressValue: m.cpuUsage > 0 ? m.cpuUsage / 100 : null,
       );
-}
-
-class _TabButton extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _TabButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.accentCyan.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: selected ? AppTheme.accentCyan : AppTheme.borderColor,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? AppTheme.accentCyan : AppTheme.textSecondary,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // マイページへ遷移するボタン（IGN 追加連携・ログアウト用）
