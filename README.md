@@ -1,3 +1,5 @@
+Proxmox 基盤の上に IaC（Terraform 等）で k3s を立て、既存 Minecraft 基盤に相乗りして本アプリ（Status Platform）を載せている。
+
 <div align="center">
 
 # 🖥️ Status Platform

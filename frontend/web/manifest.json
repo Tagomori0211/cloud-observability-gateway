@@ -1,11 +1,11 @@
 {
-    "name": "tagomori_status_frontend",
-    "short_name": "tagomori_status_frontend",
+    "name": "TAGOMORI STATUS",
+    "short_name": "TAGOMORI STATUS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Minecraft server monitoring dashboard — live status, latency, and resource metrics.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
