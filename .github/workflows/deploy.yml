@@ -40,7 +40,8 @@ permissions:
   id-token: write
 
 env:
-  GCE_INSTANCE: tagomori-app
+  # 入口・監視と同居する統合 VM（Minecraft-on-Kubernetes の Terraform/gateway.tf が管理）
+  GCE_INSTANCE: mc-gateway
   DEPLOY_DIR: ~/app
   FLUTTER_VERSION: '3.44.2'
 
@@ -155,7 +156,6 @@ jobs:
           cp -r frontend/build/web/.       bundle/web/
           cp deploy/docker-compose.yml     bundle/
           cp deploy/envoy.yaml             bundle/
-          cp deploy/vmagent-scrape.yml     bundle/
 
       # ---- GCP 認証 (IAP SSH に必要) ----
       - id: auth
@@ -209,8 +209,9 @@ jobs:
                 TOKEN=\$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)
                 printf 'TUNNEL_TOKEN=%s\n' \"\$TOKEN\" >> .env
               fi
+              # VictoriaMetrics は同じ VM のホスト（host network :8428）で待ち受けている
               if ! grep -q '^VICTORIA_METRICS_URL=' .env; then
-                printf 'VICTORIA_METRICS_URL=http://10.100.0.13:8428\n' >> .env
+                printf 'VICTORIA_METRICS_URL=http://host.docker.internal:8428\n' >> .env
               fi
 
               set_env_kv() {
