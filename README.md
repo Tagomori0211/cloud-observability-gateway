@@ -152,7 +152,7 @@ flowchart TD
 |---|---|---|
 | `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | CI が mc-gateway の `~/app/.env`（mode 600）に未設定時のみ追記。git 管理外・デプロイ時も削除しない |
 | `VICTORIA_METRICS_URL` | 📄 `~/app/.env`（CI が生成） | 既定値 `http://host.docker.internal:8428`（同じ VM の VictoriaMetrics） |
-| CI 用 SA キー | 🐙 GitHub Secrets: `GCP_CI_SA_KEY` | `terraform output -raw ci_sa_key_b64` で取得 |
+| CI の GCP 認証 | 🐙 GitHub Secrets: `GCP_WIF_PROVIDER` / `GCP_SERVICE_ACCOUNT` | Workload Identity Federation（SA キーは作らない）。値は `terraform output` で取得 |
 
 > [!WARNING]
 > **`.env` は絶対にコミットしない。** テンプレートは [.env.example](.env.example) を参照。
@@ -191,10 +191,14 @@ gcloud secrets versions add tagomori-tunnel-token --data-file=- <<< "eyJ..."
 
 | Secret | 値 |
 |---|---|
-| `GCP_CI_SA_KEY` | `terraform output -raw ci_sa_key_b64` の出力 |
+| `GCP_WIF_PROVIDER` | `terraform output -raw workload_identity_provider` の出力 |
+| `GCP_SERVICE_ACCOUNT` | `terraform output -raw ci_service_account` の出力 |
 | `GCP_PROJECT_ID` | GCP プロジェクト ID |
 | `GCE_ZONE` | `asia-northeast1-b` |
 | `GCE_SSH_USER` | CI SA の OS Login ユーザー名（`sa_<数字>` 形式） |
+| `DB_PASSWORD` | MariaDB の app ユーザーのパスワード（未設定時は compose の既定値） |
+| `PUBSUB_TOPIC` | 任意。`/list` トリガー用トピック（`projects/{project}/topics/{topic}` 形式） |
+| `CF_API_TOKEN` / `CF_ZONE_ID` | 任意。デプロイ後の Cloudflare キャッシュ削除用（Zone:Cache Purge 権限のみ） |
 
 ### 5. デプロイ
 
