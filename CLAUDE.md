@@ -7,7 +7,8 @@
 - このプロジェクトはOS Login付きセルフホストCIランナー経由でGCEにデプロイする。必ず以下を確認すること：(1) deploy.ymlにDB_PASSWORDなど必要なシークレットが実際に書き込まれているか、(2) OS LoginユーザーがusermodでDockerグループに追加されているか、(3) ランナーにunzip/jqがインストール済みか、(4) .envファイルがOS Loginユーザーの正しいホームディレクトリに配置されているか。
 
 ### 正規名称（勝手に改名しない）
-- VM=tagomori-app / ドメイン=app.tagomori.dev / Flutterパッケージ=tagomori_status_frontend
+- VM=mc-gateway / ドメイン=app.tagomori.dev / Flutterパッケージ=tagomori_status_frontend
+  - mc-gateway は 2026-09-30 に旧 tagomori-app を統合した VM（Minecraft 入口・監視スタックと同居）。VM 本体は Minecraft-on-Kubernetes の `Terraform/gateway.tf` が管理する。docs/ 配下の tagomori-app 表記は当時の記録。
 - 新規DB名=tagomori_status / DBユーザー=app / composeサービス=mariadb
 - ansible の sushiski-app は既存ドリフト。触らない・複製しない。
 

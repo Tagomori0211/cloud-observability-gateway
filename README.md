@@ -22,8 +22,8 @@ Flutter Web フロントエンド × Kotlin (Ktor / grpc-kotlin) バックエン
 </div>
 
 > [!NOTE]
-> 既存インフラ [Minecraft-on-Kubenates](https://github.com/Tagomori0211/Minecraft-on-Kubenates) に相乗りする形で構築。
-> メトリクスソースの VictoriaMetrics（`mc-monitoring-1`）は同リポジトリが管理する**既存リソース**。
+> 既存インフラ [Minecraft-on-Kubernetes](https://github.com/Tagomori0211/Minecraft-on-Kubernetes) に相乗りする形で構築。
+> 実行 VM（`mc-gateway`）とメトリクスソースの VictoriaMetrics は同リポジトリが管理する**既存リソース**。
 
 ---
 
@@ -50,15 +50,17 @@ flowchart TD
         Edge["Cloudflare Edge<br/>🔒 TLS 終端"]
     end
 
-    subgraph VM1["🖥️ GCE: mc-proxy-1（Docker Compose）"]
-        Cloudflared["cloudflared コンテナ<br/>（Tunnel クライアント）"]
-        Envoy["⚙️ Envoy :80<br/>リバースプロキシ / ルーティング"]
-        KtorWeb["🎯 Ktor :8080<br/>Flutter Web 静的配信"]
-        KtorGrpc["🔌 Ktor :50051<br/>gRPC バックエンド<br/>（grpc_web フィルタで変換済）"]
-    end
+    subgraph GW["🖥️ GCE: mc-gateway（e2-micro・Minecraft 入口 / 監視と同居）"]
+        subgraph VM1["Status Platform（Docker Compose・~/app）"]
+            Cloudflared["cloudflared コンテナ<br/>（Tunnel クライアント）"]
+            Envoy["⚙️ Envoy :80<br/>リバースプロキシ / ルーティング"]
+            KtorWeb["🎯 Ktor :8080<br/>Flutter Web 静的配信"]
+            KtorGrpc["🔌 Ktor :50051<br/>gRPC バックエンド<br/>（grpc_web フィルタで変換済）"]
+        end
 
-    subgraph VM2["📊 GCE: mc-monitoring-1"]
-        VM["VictoriaMetrics :8428"]
+        subgraph VM2["📊 監視スタック（/opt/mc-gateway・host network）"]
+            VM["VictoriaMetrics :8428"]
+        end
     end
 
     %% ============ エッジ定義 ============
@@ -67,7 +69,7 @@ flowchart TD
     Cloudflared -- "平文 HTTP" --> Envoy
     Envoy -- "📄 パス  /" --> KtorWeb
     Envoy -- "📡 パス  /shared." --> KtorGrpc
-    KtorGrpc -- "② HTTP :8428<br/>（VPC 内部）" --> VM
+    KtorGrpc -- "② HTTP :8428<br/>（同一ホスト・host.docker.internal）" --> VM
 
     %% ============ スタイル定義 ============
     classDef browser fill:#1a73e8,stroke:#0b3d91,stroke-width:3px,color:#ffffff,font-weight:bold
@@ -88,6 +90,7 @@ flowchart TD
 
     %% サブグラフの背景色
     style CF fill:#fff3e0,stroke:#f38020,stroke-width:2px
+    style GW fill:#f8f9fa,stroke:#5f6368,stroke-width:2px
     style VM1 fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,stroke-dasharray:5 5
     style VM2 fill:#fdecea,stroke:#d32f2f,stroke-width:2px,stroke-dasharray:5 5
 
@@ -104,15 +107,15 @@ flowchart TD
 
 | リソース | 役割 | 管理元 |
 |---|---|---|
-| 🖥️ **APP-instance**（`tagomori-app`） | cloudflared + Envoy + Ktor の3コンテナを Docker Compose で運用 | ✅ 本リポジトリの Terraform が作成 |
-| 📊 **GCE B**（`mc-monitoring-1`） | VictoriaMetrics + Grafana | 🔒 **既存リソース**（Minecraft-on-Kubenates 管理）。本リポジトリでは触らない |
+| 🖥️ **mc-gateway**（GCE e2-micro） | cloudflared + Envoy + Ktor + MariaDB を Docker Compose（`~/app`）で運用。Minecraft 入口の socat・監視スタックと同じ VM | 🔒 **既存リソース**（Minecraft-on-Kubernetes の `Terraform/gateway.tf`）。本リポジトリは CI でアプリを配置するのみ |
+| 📊 **VictoriaMetrics**（mc-gateway 上の :8428） | メトリクスソース | 🔒 **既存リソース**（Minecraft-on-Kubernetes の `gce/gateway/`）。本リポジトリでは触らない |
+| 🔑 CI 用 SA / WIF / Secret skeleton | GitHub Actions からの IAP SSH デプロイ | ✅ 本リポジトリの Terraform（`infra/terraform/`） |
 
 ### ネットワーク / セキュリティ設計
 
-- 🔐 通信は `tak-vpc`（`10.100.0.0/20`）内部で完結
-- 🧱 ファイアウォール `tak-vpc-allow-vm-8428-from-tagomori`（`tagomori` タグ → `minecraft` タグ / tcp:8428）を本リポジトリの Terraform が追加
+- 🔐 Ktor → VictoriaMetrics は同じ VM 内（`host.docker.internal:8428`）で完結し、VPC 越しの通信や専用ファイアウォールは不要
 - 📜 **TLS 証明書はサーバー側に一切不要**（Cloudflare が終端）
-- 🚪 GCP ファイアウォールのインバウンドは **IAP SSH のみ**。80/443 は開けない
+- 🚪 本アプリ用のインバウンドは開けない（80/443 不要）。CI は IAP SSH（`minecraft` タグ向けの既存ルール）で接続する
 
 ---
 
@@ -132,13 +135,12 @@ flowchart TD
 │       ├── Main.kt               # 1プロセス2ポート（:8080 静的配信 / :50051 gRPC）
 │       └── SharedServiceImpl.kt  # VictoriaMetrics クエリ → gRPC レスポンス
 ├── deploy/
-│   ├── docker-compose.yml        # cloudflared + Envoy + Ktor
+│   ├── docker-compose.yml        # cloudflared + Envoy + Ktor + MariaDB
 │   ├── envoy.yaml                # gRPC-Web 変換 / パスルーティング
 │   └── Dockerfile.api            # fat JAR を載せる薄いイメージ
 ├── infra/
-│   ├── terraform/                # APP-instance・ファイアウォール・Secret skeleton・CI SA
-│   ├── cloud-init/tagomori-app.yaml  # 初回プロビジョニング（Docker/Tailscale/.env）
-│   └── ansible/                  # ドリフト修正・再適用用（docker/tailscale/app_deploy ロール）
+│   ├── terraform/                # CI 用 SA / WIF・Secret skeleton（VM は持たない）
+│   └── ansible/                  # 旧 tagomori-app 向けロール（mc-gateway 統合後は未使用）
 └── .github/workflows/deploy.yml  # CI/CD（IAP SSH 経由デプロイ）
 ```
 
@@ -148,10 +150,9 @@ flowchart TD
 
 | シークレット | 保管場所 | 備考 |
 |---|---|---|
-| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | cloud-init / Ansible が APP-instance の `~/app/.env`（mode 600）に展開。git 管理外・rsync 除外 |
-| `VICTORIA_METRICS_URL` | 📄 `~/app/.env`（自動生成） | `mc-monitoring-1` の VPC 内部 IP を gcloud で動的取得 |
+| `TUNNEL_TOKEN` | 🗄️ Secret Manager: `tagomori-tunnel-token` | CI が mc-gateway の `~/app/.env`（mode 600）に未設定時のみ追記。git 管理外・デプロイ時も削除しない |
+| `VICTORIA_METRICS_URL` | 📄 `~/app/.env`（CI が生成） | 既定値 `http://host.docker.internal:8428`（同じ VM の VictoriaMetrics） |
 | CI 用 SA キー | 🐙 GitHub Secrets: `GCP_CI_SA_KEY` | `terraform output -raw ci_sa_key_b64` で取得 |
-| Tailscale auth key | 🗄️ Secret Manager: `tailscale-auth-key`（既存・共有） | 既存インフラと同一パターン |
 
 > [!WARNING]
 > **`.env` は絶対にコミットしない。** テンプレートは [.env.example](.env.example) を参照。
@@ -175,14 +176,14 @@ terraform init && terraform apply
 
 | 作成されるもの | 既存リソース（data source 参照のみ・変更しない） |
 |---|---|
-| `tagomori-app` VM / 静的IP | `tak-vpc` / `tak-subnet` |
-| IAP SSH ファイアウォール / tcp:8428 ファイアウォール | `mc-proxy-sa` |
-| `tagomori-tunnel-token` skeleton / CI 用 SA（`tagomori-ci-sa`） | `mc-monitoring-1` |
+| `tagomori-tunnel-token` skeleton / CI 用 SA（`tagomori-ci-sa`）と IAM / WIF（`github-pool`） | `mc-proxy-sa`（mc-gateway の VM SA） |
+
+実行 VM `mc-gateway` は Minecraft-on-Kubernetes の Terraform（`Terraform/gateway.tf`）が作成する。
 
 ### 3. シークレット登録
 
 ```bash
-# Cloudflare で取得したトークンを登録（cloud-init がこれを .env に展開する）
+# Cloudflare で取得したトークンを登録（CI がデプロイ時に mc-gateway の .env へ展開する）
 gcloud secrets versions add tagomori-tunnel-token --data-file=- <<< "eyJ..."
 ```
 
@@ -232,9 +233,9 @@ docker run --rm -v $(pwd)/deploy/envoy.yaml:/envoy.yaml envoyproxy/envoy:v1.31.5
 
 | # | 確認項目 | コマンド / 手順 | 期待結果 |
 |---|---|---|---|
-| 1 | 🌩️ Tunnel 接続 | （APP-instance 上で）`docker compose logs cloudflared` | `Registered tunnel connection` が出る |
+| 1 | 🌩️ Tunnel 接続 | （mc-gateway の `~/app` で）`docker compose logs cloudflared` | `Registered tunnel connection` が出る |
 | 2 | 📄 静的配信 | `curl -I https://app.tagomori.dev/` | `200` + `text/html`、`cf-ray` ヘッダ付きなら CF 経由 |
-| 3 | 📊 VictoriaMetrics 到達 | （APP-instance 上で）`source ~/app/.env && curl -s "${VICTORIA_METRICS_URL}/health"` | `OK` |
+| 3 | 📊 VictoriaMetrics 稼働 | （mc-gateway 上で）`curl -s http://127.0.0.1:8428/health` | `OK` |
 | 4 | 📡 gRPC-Web ルーティング | ブラウザ DevTools > Network で `/shared.MetricsService/GetMetrics` を確認 | `Content-Type: application/grpc-web+proto` で `200` |
 
 ---
