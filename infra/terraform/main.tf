@@ -19,21 +19,14 @@ provider "google" {
 }
 
 # ============================================================
-# Data: 既存リソースの参照（作成しない）
+# 実行環境（2026-09-30〜）
 # ============================================================
-# 既存 tak-vpc / tak-subnet は Minecraft-on-Kubenates リポジトリの
-# Terraform/main.tf が管理。ここでは data source として参照のみ。
+# Status Platform は Minecraft-on-Kubernetes リポジトリが管理する統合 VM mc-gateway
+# （Terraform/gateway.tf、SA: mc-proxy-sa）上で動く。本リポジトリの Terraform は
+# VM を持たず、CI デプロイ用の SA / WIF と Secret のみを管理する。
+# 旧 tagomori-app VM・静的 IP・専用 Firewall は統合に伴い削除した。
 
-data "google_compute_network" "tak_vpc" {
-  name = "tak-vpc"
-}
-
-data "google_compute_subnetwork" "tak_subnet" {
-  name   = "tak-vpc-subnet"
-  region = var.region
-}
-
-# 既存 SA: mc-proxy-sa（Secret Manager 読取権限保有）
+# 既存 SA: mc-proxy-sa（mc-gateway の VM SA。CI が actAs して SSH デプロイする）
 data "google_service_account" "mc_proxy_sa" {
   account_id = "mc-proxy-sa"
 }
@@ -51,124 +44,10 @@ locals {
 }
 
 # ============================================================
-# 静的 IP: tagomori-app 用（SSH CI ターゲットとして利用）
-# ============================================================
-resource "google_compute_address" "tagomori_app_ip" {
-  name   = "tagomori-app-ip"
-  region = var.region
-  labels = local.common_labels
-}
-
-# ============================================================
-# Data: mc-monitoring-1 の内部 IP を取得（URL 生成用）
-# ============================================================
-data "google_compute_instance" "mc_monitoring" {
-  name = "mc-monitoring-1"
-  zone = var.zone
-}
-
-# ============================================================
-# Firewall: IAP SSH — tagomori タグ
-# ============================================================
-# 既存の tak-vpc-allow-iap-ssh は "minecraft" タグのみ対象。
-# tagomori-app は "tagomori" タグで分離し、独立して管理する。
-resource "google_compute_firewall" "tagomori_iap_ssh" {
-  name    = "tak-vpc-allow-iap-ssh-tagomori"
-  network = data.google_compute_network.tak_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  # GCP IAP のソース IP レンジ
-  source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["tagomori"]
-
-  description = "Allow SSH via IAP for tagomori-app"
-}
-
-# ============================================================
-# GCE A: tagomori-app（新規作成）
-# ============================================================
-resource "google_compute_instance" "tagomori_app" {
-  name         = "tagomori-app"
-  machine_type = var.machine_type
-  zone         = var.zone
-  tags         = ["tagomori", "tailscale"]
-
-  allow_stopping_for_update = true
-
-  boot_disk {
-    initialize_params {
-      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64"
-      size  = 20
-      type  = "pd-balanced"
-    }
-  }
-
-  network_interface {
-    subnetwork = data.google_compute_subnetwork.tak_subnet.name
-    access_config {
-      nat_ip = google_compute_address.tagomori_app_ip.address
-    }
-  }
-
-  # 既存 mc-proxy-sa を流用（Secret Manager 読取権限保有済み）
-  service_account {
-    email  = data.google_service_account.mc_proxy_sa.email
-    scopes = ["cloud-platform"]
-  }
-
-  metadata = {
-    # CI SA は OS Login で SSH する（メタデータ SSH キーは setMetadata 権限が必要になるため不可）
-    enable-oslogin = "TRUE"
-    # Tailscale + Docker を初回プロビジョニング
-    user-data = file("${path.module}/../cloud-init/tagomori-app.yaml")
-  }
-
-  shielded_instance_config {
-    enable_secure_boot          = false
-    enable_vtpm                 = true
-    enable_integrity_monitoring = true
-  }
-
-  labels = local.common_labels
-
-  lifecycle {
-    ignore_changes = [metadata["ssh-keys"]]
-  }
-}
-
-# ============================================================
 # Secret Manager: tagomori-tunnel-token
 # ============================================================
 # skeleton のみ Terraform で作成。実際の値は Cloudflare Tunnel 作成後に手動で登録:
 #   gcloud secrets versions add tagomori-tunnel-token --data-file=- <<< "eyJ..."
-# ============================================================
-# Firewall: tagomori-app → mc-monitoring-1 (VictoriaMetrics :8428)
-# ============================================================
-# mc-monitoring-1 は "minecraft" タグを持つ。
-# tagomori-app ("tagomori" タグ) から VPC 内部で :8428 に到達できるようにする。
-# VictoriaMetrics は 0.0.0.0:8428 でバインド済み（gce/monitoring/compose.yaml）。
-resource "google_compute_firewall" "allow_vm_8428_from_tagomori" {
-  name    = "tak-vpc-allow-vm-8428-from-tagomori"
-  network = data.google_compute_network.tak_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["8428"]
-  }
-
-  source_tags = ["tagomori"]   # FROM tagomori-app
-  target_tags = ["minecraft"]  # TO mc-monitoring-1 (既存タグ)
-
-  description = "Allow tagomori-app to reach VictoriaMetrics on mc-monitoring-1 via VPC"
-}
-
-# ============================================================
-# Secret Manager: tagomori-tunnel-token
-# ============================================================
 resource "google_secret_manager_secret" "tagomori_tunnel_token" {
   secret_id = "tagomori-tunnel-token"
   replication {
