@@ -1,4 +1,6 @@
-# Runtime stack on mc-gateway: cloudflared + Envoy + Ktor + MariaDB
+# Local stack: cloudflared + Envoy + Ktor + MariaDB
+#
+# 本番は k3s-worker（deploy/k8s/）で動く。以下は 2026-09-30 まで mc-gateway で運用していた当時の記述。
 #
 # mc-gateway は Minecraft-on-Kubernetes リポジトリ（Terraform/gateway.tf・gce/gateway/）が管理する
 # 単体 VM（e2-micro）で、入口 socat・監視スタック（VictoriaMetrics 等）と同居する。
