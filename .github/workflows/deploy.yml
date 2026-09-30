@@ -1,31 +1,28 @@
-# CI/CD: main push → (optional infra) → proto gen → Kotlin/Flutter build → APP-instance deploy
+# CI/CD: main push → (optional infra) → proto gen → Kotlin/Flutter build → k3s-worker deploy
 #
-# 接続方式: gcloud compute ssh --tunnel-through-iap
-#   既存インフラ (Minecraft-on-Kubenates) に合わせ、IAP 経由のみ。
-#   公開ポート (tcp:22/80/443) は一切不要。
+# 実行環境: k3s-worker（オンプレ単一ノード k3s）の namespace tagomori-status。
+#   self-hosted ランナーから Tailscale 経由で k3s-worker に SSH し、
+#   app.jar / Flutter Web を /opt/tagomori-status/releases/<sha> に rsync → deploy/k8s/deploy.sh で適用。
+#   イメージレジストリは使わない（公式 temurin イメージ + hostPath）。
 #
 # Required GitHub Secrets:
-#   GCP_WIF_PROVIDER  : Workload Identity Provider リソース名
-#                       `terraform output -raw workload_identity_provider` で取得
-#   GCP_SERVICE_ACCOUNT: tagomori-ci-sa のメールアドレス
-#                       `terraform output -raw ci_service_account` で取得
-#   GCP_PROJECT_ID   : GCP プロジェクト ID
-#   GCE_ZONE         : asia-northeast1-b
-#   GCE_SSH_USER     : VM への OS Login ユーザー名
-#                      (SA メールの @ 前部分: sa_<数字>_<hex>)
-#                      `gcloud compute os-login describe-profile --project=...` で確認
-#   DB_PASSWORD      : MariaDB の app ユーザーのパスワード（ADR-account-linking 用）。
-#                      api コンテナ(DB_PASSWORD)と mariadb コンテナ(MARIADB_PASSWORD)の
-#                      双方に同じ値を書き込む。未設定の場合は docker-compose.yml の
-#                      デフォルト値が両コンテナで一致した状態のまま使われる。
+#   K3S_SSH_KEY      : k3s-worker（shinari）への CI 専用 SSH 秘密鍵（sushiMCfront-ci-deploy）
+#   K3S_KNOWN_HOSTS  : k3s-worker の ssh-keyscan 結果
+#   DB_PASSWORD      : MariaDB の app ユーザーのパスワード。Secret tagomori-status-db に同期する。
+#                      MariaDB 側のユーザーは初回起動時にしか作られないため、値を変えるときは
+#                      DB 内で ALTER USER も合わせて行うこと。
 #   PUBSUB_TOPIC     : Pub/Sub トピック名（projects/{project}/topics/{topic} 形式）。
 #                      ログイン・更新ボタン押下時に Minecraft /list をトリガーする。
 #                      未設定の場合は publish をスキップ（エラーにはならない）。
 #
+# 手動で一度だけ作成済みの Secret（CI は作成・上書きしない）:
+#   cloudflared-token : Secret Manager tagomori-tunnel-token の TUNNEL_TOKEN
+#   gcp-credentials   : minecraft/gcs-backup-credentials の key.json（Pub/Sub publish 用 ADC）
+#
 # Optional (Terraform job):
-#   TF_VAR_PROJECT_ID: var.project_id に渡す値 (= GCP_PROJECT_ID と同一で可)
+#   GCP_WIF_PROVIDER / GCP_SERVICE_ACCOUNT / GCP_PROJECT_ID
 
-name: Deploy to GCE
+name: Deploy to k3s
 
 on:
   push:
@@ -40,9 +37,9 @@ permissions:
   id-token: write
 
 env:
-  # 入口・監視と同居する統合 VM（Minecraft-on-Kubernetes の Terraform/gateway.tf が管理）
-  GCE_INSTANCE: mc-gateway
-  DEPLOY_DIR: ~/app
+  K3S_HOST: 100.107.122.45   # k3s-worker の Tailscale IP
+  K3S_USER: shinari
+  RELEASES_DIR: /opt/tagomori-status/releases
   FLUTTER_VERSION: '3.44.2'
 
 jobs:
@@ -90,8 +87,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        # python3-numpy: IAP トンネルの転送帯域を上げる（gcloud の警告対応）
-        run: sudo apt-get install -y unzip curl git jq xz-utils python3-numpy
+        run: sudo apt-get install -y unzip curl git jq xz-utils rsync openssh-client
 
       # ---- Dart stubs (Kotlin は Gradle が自動生成) ----
       - name: Setup protoc
@@ -148,96 +144,55 @@ jobs:
           flutter build web --release
 
       # ---- Bundle ----
-      - name: Assemble deploy bundle
+      - name: Assemble release
         run: |
-          mkdir -p bundle/api bundle/web
-          cp backend/build/libs/*.jar  bundle/api/app.jar
-          cp deploy/Dockerfile.api         bundle/api/Dockerfile
-          cp -r frontend/build/web/.       bundle/web/
-          cp deploy/docker-compose.yml     bundle/
-          cp deploy/envoy.yaml             bundle/
+          rm -rf release && mkdir -p release/web
+          cp backend/build/libs/*.jar  release/app.jar
+          cp -r frontend/build/web/.   release/web/
+          cp deploy/envoy.yaml         release/
+          cp -r deploy/k8s             release/k8s
 
-      # ---- GCP 認証 (IAP SSH に必要) ----
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      # ---- ファイル転送 (gcloud compute scp + IAP) ----
-      # 多数の小ファイルを個別 scp すると IAP トンネルのオーバーヘッドで激遅になるため、
-      # tar 1 ファイルに固めて転送 → VM 側で展開する（接続も 2 回で済む）。
-      - name: Transfer bundle to APP-instance via IAP
+      - name: Configure SSH to k3s-worker
         env:
-          ZONE: ${{ secrets.GCE_ZONE }}
-          SSH_USER: ${{ secrets.GCE_SSH_USER }}
+          K3S_SSH_KEY: ${{ secrets.K3S_SSH_KEY }}
+          K3S_KNOWN_HOSTS: ${{ secrets.K3S_KNOWN_HOSTS }}
         run: |
-          tar -C bundle -czf bundle.tar.gz .
+          mkdir -p ~/.ssh/tagomori-status
+          printf '%s\n' "$K3S_SSH_KEY" > ~/.ssh/tagomori-status/key
+          printf '%s\n' "$K3S_KNOWN_HOSTS" > ~/.ssh/tagomori-status/known_hosts
+          chmod 600 ~/.ssh/tagomori-status/*
+          echo "SSH_OPTS=-i $HOME/.ssh/tagomori-status/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/tagomori-status/known_hosts -o ConnectTimeout=15" >> "$GITHUB_ENV"
 
-          gcloud compute scp \
-            bundle.tar.gz \
-            "${SSH_USER}@${GCE_INSTANCE}:/tmp/bundle.tar.gz" \
-            --zone="${ZONE}" --tunnel-through-iap
+      # ---- 転送（rsync over SSH） ----
+      - name: Transfer release to k3s-worker
+        run: |
+          rsync -a --delete -e "ssh $SSH_OPTS" release/ \
+            "${K3S_USER}@${K3S_HOST}:${RELEASES_DIR}/${GITHUB_SHA}/"
 
-          # 既存アセットを削除（.env は保護）→ 展開
-          gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
-            --zone="${ZONE}" \
-            --tunnel-through-iap \
-            --command="find ${DEPLOY_DIR} -mindepth 1 -not -name '.env' -delete 2>/dev/null; mkdir -p ${DEPLOY_DIR} && tar -xzf /tmp/bundle.tar.gz -C ${DEPLOY_DIR} && rm /tmp/bundle.tar.gz"
-
-      # ---- コンテナ再構築 (IAP SSH) ----
-      # down → up で全コンテナを確実に入れ替える。
-      - name: Rebuild containers on APP-instance via IAP
+      # ---- Secret 同期（値は stdin 経由で渡し、コマンドラインやログに出さない） ----
+      - name: Sync app secret
         env:
-          ZONE: ${{ secrets.GCE_ZONE }}
-          SSH_USER: ${{ secrets.GCE_SSH_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           PUBSUB_TOPIC: ${{ secrets.PUBSUB_TOPIC }}
         run: |
-          gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
-            --zone="${ZONE}" \
-            --tunnel-through-iap \
-            --command="
-              set -euo pipefail
-              cd ${DEPLOY_DIR}
-              touch .env
-              chmod 600 .env
+          {
+            echo 'apiVersion: v1'
+            echo 'kind: Secret'
+            echo 'metadata:'
+            echo '  name: tagomori-status-db'
+            echo '  namespace: tagomori-status'
+            echo 'data:'
+            echo "  DB_PASSWORD: $(printf '%s' "$DB_PASSWORD" | base64 -w0)"
+            if [ -n "$PUBSUB_TOPIC" ]; then
+              echo "  PUBSUB_TOPIC: $(printf '%s' "$PUBSUB_TOPIC" | base64 -w0)"
+            fi
+          } | ssh $SSH_OPTS "${K3S_USER}@${K3S_HOST}" 'sudo kubectl apply -f -'
 
-              if ! grep -q '^TUNNEL_TOKEN=' .env; then
-                TOKEN=\$(gcloud secrets versions access latest --secret=tagomori-tunnel-token)
-                printf 'TUNNEL_TOKEN=%s\n' \"\$TOKEN\" >> .env
-              fi
-              # VictoriaMetrics は同じ VM のホスト（host network :8428）で待ち受けている
-              if ! grep -q '^VICTORIA_METRICS_URL=' .env; then
-                printf 'VICTORIA_METRICS_URL=http://host.docker.internal:8428\n' >> .env
-              fi
-
-              set_env_kv() {
-                key=\"\$1\"; val=\"\$2\"
-                [ -z \"\$val\" ] && return 0
-                if grep -q \"^\${key}=\" .env; then
-                  sed -i \"s|^\${key}=.*|\${key}=\${val}|\" .env
-                else
-                  printf '%s=%s\n' \"\$key\" \"\$val\" >> .env
-                fi
-              }
-              # DB_PASSWORD (api 接続用) と MARIADB_PASSWORD (mariadb 側ユーザー作成用) は
-              # 同じ値でなければ認証が通らないため、同一の GitHub Secret から両方に書き込む。
-              set_env_kv DB_USER 'app'
-              set_env_kv DB_PASSWORD '${DB_PASSWORD}'
-              set_env_kv MARIADB_DATABASE 'tagomori_status'
-              set_env_kv MARIADB_USER 'app'
-              set_env_kv MARIADB_PASSWORD '${DB_PASSWORD}'
-              set_env_kv PUBSUB_TOPIC '${PUBSUB_TOPIC}'
-
-              echo '>>> docker compose down'
-              docker compose down --remove-orphans
-              echo '>>> docker compose up'
-              docker compose up -d --build
-              docker image prune -f
-            "
+      # ---- 適用 + ロールアウト待ち ----
+      - name: Deploy to k3s
+        run: |
+          ssh $SSH_OPTS "${K3S_USER}@${K3S_HOST}" \
+            "sudo bash ${RELEASES_DIR}/${GITHUB_SHA}/k8s/deploy.sh ${GITHUB_SHA}"
 
       # ---- Cloudflare キャッシュパージ (オプション) ----
       # CF_API_TOKEN / CF_ZONE_ID を GitHub Secrets に設定すると有効になる。
@@ -263,29 +218,19 @@ jobs:
             || echo 'CF purge failed (non-fatal)'
 
       # ---- 起動確認 + ログ取得 ----
-      # コンテナが安定するまで 15 秒待ってからログを取得する。
-      # app.tagomori.dev への HTTP チェックも合わせて実施。
-      - name: Verify deployment on APP-instance via IAP
-        env:
-          ZONE: ${{ secrets.GCE_ZONE }}
-          SSH_USER: ${{ secrets.GCE_SSH_USER }}
+      - name: Verify deployment
         run: |
-          sleep 15
-          gcloud compute ssh "${SSH_USER}@${GCE_INSTANCE}" \
-            --zone="${ZONE}" \
-            --tunnel-through-iap \
-            --command="
-              set -euo pipefail
-              cd ${DEPLOY_DIR}
-              echo '========== container status =========='
-              docker compose ps
-              echo '========== api logs (last 40) =========='
-              docker compose logs --no-color --tail=40 api
-              echo '========== envoy logs (last 20) =========='
-              docker compose logs --no-color --tail=20 envoy
-              echo '========== cloudflared logs (last 20) =========='
-              docker compose logs --no-color --tail=20 cloudflared
-              echo '========== HTTP check =========='
-              curl -sfo /dev/null -w 'HTTP %{http_code}  %{time_total}s  %{url_effective}\n' \
-                https://app.tagomori.dev/ || echo 'curl failed (exit '\$?')'
-            "
+          ssh $SSH_OPTS "${K3S_USER}@${K3S_HOST}" '
+            echo "========== pods =========="
+            sudo kubectl -n tagomori-status get pods -o wide
+            echo "========== api logs (last 40) =========="
+            sudo kubectl -n tagomori-status logs deploy/api --tail=40 | grep -v " DEBUG "
+            echo "========== cloudflared logs (last 10) =========="
+            sudo kubectl -n tagomori-status logs deploy/cloudflared --tail=10
+          '
+          curl -sfo /dev/null -w 'HTTP %{http_code}  %{time_total}s  %{url_effective}\n' \
+            https://app.tagomori.dev/
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -rf ~/.ssh/tagomori-status

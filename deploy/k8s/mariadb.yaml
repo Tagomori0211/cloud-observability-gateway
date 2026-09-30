@@ -1,0 +1,75 @@
+# MariaDB（tagomori_status / app）。データは k3s-worker の local-path PVC に置く。
+# パスワードは Secret tagomori-status-db（CI が GitHub Secret DB_PASSWORD から作成）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb
+  namespace: tagomori-status
+spec:
+  clusterIP: None
+  selector:
+    app: mariadb
+  ports:
+    - name: mysql
+      port: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  namespace: tagomori-status
+spec:
+  serviceName: mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11.4
+          args:
+            - "--innodb-buffer-pool-size=128M"
+            - "--performance-schema=OFF"
+            - "--max-connections=50"
+          env:
+            - name: MARIADB_DATABASE
+              value: tagomori_status
+            - name: MARIADB_USER
+              value: app
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tagomori-status-db
+                  key: DB_PASSWORD
+            # root は初期化時にランダム生成（運用では使わない）
+            - name: MARIADB_RANDOM_ROOT_PASSWORD
+              value: "1"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi

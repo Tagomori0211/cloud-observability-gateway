@@ -1,0 +1,88 @@
+# Kotlin API（Ktor :8080 + gRPC :50051）。
+# app.jar と Flutter Web は CI が k3s-worker の /opt/tagomori-status/releases/<sha> に配置し、
+# hostPath で /app にマウントする（単一ノード k3s のためレジストリ不要）。
+# __RELEASE__ は deploy.sh がコミット SHA に置換する。
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: tagomori-status
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 8080
+    - name: grpc
+      port: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: tagomori-status
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: eclipse-temurin:21-jre-jammy
+          command: ["java", "-XX:MaxRAMPercentage=65.0", "-jar", "/app/app.jar"]
+          env:
+            # mc-gateway の VictoriaMetrics（Tailscale 経由）
+            - name: VICTORIA_METRICS_URL
+              value: http://100.105.149.22:8428
+            - name: DB_URL
+              value: jdbc:mariadb://mariadb:3306/tagomori_status
+            - name: DB_USER
+              value: app
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tagomori-status-db
+                  key: DB_PASSWORD
+            - name: PUBSUB_TOPIC
+              valueFrom:
+                secretKeyRef:
+                  name: tagomori-status-db
+                  key: PUBSUB_TOPIC
+                  optional: true
+            # Pub/Sub publish 用の authorized_user ADC（minecraft ns の gcs-backup-credentials と同じ内容）
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/key.json
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 50051
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 384Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: release
+              mountPath: /app
+              readOnly: true
+            - name: gcp-credentials
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: release
+          hostPath:
+            path: /opt/tagomori-status/releases/__RELEASE__
+            type: Directory
+        - name: gcp-credentials
+          secret:
+            secretName: gcp-credentials
